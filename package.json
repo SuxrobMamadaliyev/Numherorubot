@@ -1,0 +1,14 @@
+{
+  "name": "herosms-telegram-bot",
+  "version": "1.0.0",
+  "description": "HeroSMS API orqali raqam sotib oluvchi Telegram bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "axios": "^1.7.7",
+    "dotenv": "^16.4.5"
+  }
+}
