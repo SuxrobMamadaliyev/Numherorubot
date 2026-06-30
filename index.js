@@ -244,8 +244,29 @@ bot.catch((err, ctx) => {
   } catch {}
 });
 
-// ================= LAUNCH =================
-bot.launch().then(() => console.log('🤖 Bot ishga tushdi'));
+// ================= LAUNCH (WEBHOOK) =================
+const PORT = process.env.PORT || 3000;
+// RENDER_EXTERNAL_URL Render tomonidan avtomatik beriladi (masalan: https://my-bot.onrender.com)
+// Agar boshqa hostingda bo'lsa, WEBHOOK_URL ni .env orqali qo'lda bering.
+const DOMAIN = process.env.WEBHOOK_URL || process.env.RENDER_EXTERNAL_URL;
+const WEBHOOK_PATH = `/webhook/${process.env.BOT_TOKEN}`;
+
+if (!DOMAIN) {
+  console.error('❌ WEBHOOK_URL yoki RENDER_EXTERNAL_URL topilmadi. .env ga WEBHOOK_URL qo\'shing (masalan: https://your-app.onrender.com)');
+  process.exit(1);
+}
+
+bot.telegram.setWebhook(`${DOMAIN}${WEBHOOK_PATH}`).then(() => {
+  console.log(`✅ Webhook o'rnatildi: ${DOMAIN}${WEBHOOK_PATH}`);
+});
+
+bot.launch({
+  webhook: {
+    domain: DOMAIN,
+    hookPath: WEBHOOK_PATH,
+    port: PORT,
+  },
+}).then(() => console.log(`🤖 Bot ishga tushdi (webhook, port ${PORT})`));
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
