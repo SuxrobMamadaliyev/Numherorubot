@@ -8,7 +8,7 @@ const { mainMenu, backToMain } = require('./keyboards');
 const { requireChannelSub } = require('./channelSub');
 
 const { adminScene, showAdminPanel } = require('./adminScene');
-const { topupScene, showTopupMenu, approveTopup } = require('./topupScene');
+const { topupScene, showTopupMenu, approveTopup, creditStarsPayment } = require('./topupScene');
 const {
   showServices,
   handleServiceSelect,
@@ -234,6 +234,32 @@ bot.command('addbalance', async ctx => {
   try {
     await ctx.telegram.sendMessage(targetId, `💰 Balansingizga ${amount.toLocaleString()} so'm qo'shildi!`);
   } catch {}
+});
+
+// ================= TELEGRAM STARS TO'LOVI =================
+bot.on('pre_checkout_query', async ctx => {
+  // Hozircha barcha so'rovlarni tasdiqlaymiz (zaxira/limit tekshiruvi shart emas)
+  try {
+    await ctx.answerPreCheckoutQuery(true);
+  } catch (e) {
+    console.error('PreCheckout xatosi:', e.message);
+  }
+});
+
+bot.on('successful_payment', async ctx => {
+  const payment = ctx.message.successful_payment;
+  if (payment.currency !== 'XTR') return;
+
+  const starsCount = payment.total_amount;
+  // payload formati: topup_<telegramId>_<amountUZS>_<timestamp>
+  const parts = (payment.invoice_payload || '').split('_');
+  const amountUZS = parseInt(parts[2]) || 0;
+
+  if (amountUZS > 0) {
+    await creditStarsPayment(ctx, ctx.from.id, amountUZS, starsCount);
+  } else {
+    await ctx.reply('✅ To\'lov qabul qilindi, lekin summani aniqlashda xato. Admin bilan bog\'laning.');
+  }
 });
 
 // ================= ERROR HANDLING =================
