@@ -1,12 +1,12 @@
 const { Scenes, Markup } = require('telegraf');
-const { getSetting, setSetting, getAllSettings } = require('../settings');
+const { getSetting, setSetting, getAllSettings } = require('./settings');
 const {
   adminPanelKeyboard,
   adminSubPricesKeyboard,
   backToAdmin,
-} = require('../keyboards');
-const { User, Activation } = require('../models');
-const { getBalance } = require('../herosms');
+} = require('./keyboards');
+const { User, Activation } = require('./models');
+const { getBalance } = require('./herosms');
 
 // Admin panel asosiy ko'rinish
 async function showAdminPanel(ctx) {
