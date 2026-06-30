@@ -14,6 +14,7 @@ async function showAdminPanel(ctx) {
     `💱 USD/UZS kurs: <b>${s.usd_to_uzs.toLocaleString()} so'm</b>\n` +
     `💳 Karta: <b>${s.card_number}</b>\n` +
     `👤 Egasi: <b>${s.card_holder}</b>\n` +
+    `📢 Majburiy kanal: <b>${s.force_sub_channel || 'oʻchirilgan'}</b>\n` +
     `💬 Support: <b>${s.support_username}</b>`;
 
   const keyboard = adminPanelKeyboard();
@@ -22,6 +23,16 @@ async function showAdminPanel(ctx) {
   } else {
     await ctx.reply(text, { parse_mode: 'HTML', ...keyboard });
   }
+}
+
+function channelMenuKeyboard(currentChannel) {
+  const rows = [];
+  rows.push([Markup.button.callback(currentChannel ? '✏️ Kanalni almashtirish' : '➕ Kanal qoʻshish', 'adm_channel_set')]);
+  if (currentChannel) {
+    rows.push([Markup.button.callback('🚫 Majburiy obunani oʻchirish', 'adm_channel_remove')]);
+  }
+  rows.push([Markup.button.callback('🔙 Admin panel', 'admin_panel')]);
+  return Markup.inlineKeyboard(rows);
 }
 
 // Waiting state: { key, label }
@@ -38,9 +49,10 @@ function adminScene() {
   const promptMap = {
     adm_markup:     { key: 'markup_percent',     label: 'Yangi markup foizini kiriting (masalan: 25)' },
     adm_usdrate:    { key: 'usd_to_uzs',         label: "1 USD = ? so'm (masalan: 12700)" },
-    adm_topupfee:   { key: 'topup_fee_percent',  label: "Balans to'ldirish komissiyasini kiriting % (masalan: 3)" },
+    adm_topupfee:   { key: 'topup_fee_percent',  label: "Balans to'ldirish komissiyasini kiriting % (masalan: 5)" },
     adm_card:       { key: '_card_combo',        label: 'Karta raqami va egasini kiriting:\nFormat: KARTA_RAQAMI|Ism Familiya\nMasalan: 8600 1234 5678 9012|Karimov Karim' },
     adm_support:    { key: 'support_username',   label: 'Support username kiriting (masalan: @admin_support)' },
+    adm_channel_set:{ key: 'force_sub_channel',  label: "Kanal username'ini kiriting (masalan: @mychannel).\n❗️Bot kanalda admin bo'lishi shart, aks holda tekshiruv ishlamaydi." },
   };
 
   // Inline button handler
@@ -53,14 +65,34 @@ function adminScene() {
       return showAdminPanel(ctx);
     }
 
+    if (data === 'adm_channel') {
+      await ctx.answerCbQuery();
+      const channel = await getSetting('force_sub_channel');
+      return ctx.editMessageText(
+        `📢 <b>Majburiy kanal obunasi</b>\n\n` +
+        `Joriy holat: <b>${channel || 'oʻchirilgan'}</b>\n\n` +
+        (channel
+          ? "Foydalanuvchilar botdan foydalanishdan oldin shu kanalga aʼzo boʻlishlari shart."
+          : "Hozircha majburiy obuna oʻchirilgan — istalgan foydalanuvchi botdan erkin foydalanadi."),
+        { parse_mode: 'HTML', ...channelMenuKeyboard(channel) }
+      );
+    }
+
+    if (data === 'adm_channel_remove') {
+      await ctx.answerCbQuery('🚫 Oʻchirildi');
+      await setSetting('force_sub_channel', '');
+      return ctx.editMessageText(
+        '🚫 Majburiy kanal obunasi oʻchirildi. Endi foydalanuvchilar erkin foydalanishadi.',
+        { parse_mode: 'HTML', ...backToAdmin() }
+      );
+    }
+
     if (data === 'adm_stats') {
       await ctx.answerCbQuery();
       const totalUsers = await User.countDocuments();
       const totalActivations = await Activation.countDocuments();
       const successAct = await Activation.countDocuments({ status: 'success' });
 
-      // Sof foyda: foydalanuvchilardan yig'ilgan jami pul − ularning balansidagi qolgan pul − HeroSMS'ga ketgan narx
-      // Eng aniq usul: totalSpent (raqam sotishdan tushgan) + totalFeeCollected (to'ldirishdan ushlangan)
       const agg = await User.aggregate([
         { $group: { _id: null, totalSpent: { $sum: '$totalSpent' }, totalFee: { $sum: '$totalFeeCollected' } } },
       ]);
@@ -115,6 +147,13 @@ function adminScene() {
         await setSetting('card_number', cardNum);
         await setSetting('card_holder', cardHolder);
         await ctx.reply(`✅ Karta yangilandi:\n💳 ${cardNum}\n👤 ${cardHolder}`, backToAdmin());
+      } else if (w.key === 'force_sub_channel') {
+        let channel = val.trim();
+        if (!channel.startsWith('@') && !channel.startsWith('https://t.me/')) {
+          return ctx.reply("❌ Format xato! @username yoki https://t.me/username koʻrinishida kiriting.", backToAdmin());
+        }
+        await setSetting('force_sub_channel', channel);
+        await ctx.reply(`✅ Majburiy kanal oʻrnatildi: ${channel}\n\n❗️Eslatma: botni shu kanalga admin qilib qoʻyishni unutmang, aks holda obuna tekshiruvi ishlamaydi.`, backToAdmin());
       } else {
         const numVal = parseFloat(val);
         if (['markup_percent', 'usd_to_uzs', 'topup_fee_percent'].includes(w.key)) {
