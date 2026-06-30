@@ -9,6 +9,7 @@ const DEFAULTS = {
   card_number: '8600 0000 0000 0000',
   card_holder: 'Abdullayev Abdulla',
   support_username: '@admin_support',
+  force_sub_channel: '',       // Majburiy obuna kanal username (masalan: @mychannel). Bo'sh bo'lsa — o'chirilgan.
 };
 
 async function getSetting(key) {
