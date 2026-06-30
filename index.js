@@ -3,24 +3,24 @@ const { Telegraf, Scenes, session, Markup } = require('telegraf');
 const mongoose = require('mongoose');
 
 const { User, Activation } = require('./models');
-const { isAdmin, adminOnly, ADMIN_IDS } = require('./middlewares/admin');
-const { requireSubscription } = require('./middlewares/subscription');
+const { isAdmin, adminOnly, ADMIN_IDS } = require('./admin');
+const { requireSubscription } = require('./subscriptionMw');
 const { mainMenu, backToMain } = require('./keyboards');
 
-const { adminScene, showAdminPanel } = require('./scenes/adminScene');
+const { adminScene, showAdminPanel } = require('./adminScene');
 const {
   subscriptionScene,
   showSubscriptionMenu,
   approveSubscription,
   PLAN_LABEL,
-} = require('./scenes/subscriptionScene');
+} = require('./subscriptionScene');
 const {
   showServices,
   handleServiceSelect,
   handleCountrySelect,
   handleConfirm,
   handleCancelActivation,
-} = require('./scenes/buyScene');
+} = require('./buyScene');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
