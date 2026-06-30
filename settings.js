@@ -8,9 +8,9 @@ const DEFAULTS = {
   sub_lifetime_uzs: 199000,    // Umrbod obuna narxi (so'm)
   min_balance_uzs: 5000,       // Minimal balans (so'm)
   referral_bonus_uzs: 3000,    // Referal uchun bonus (so'm)
-  card_number: '9860 1678 4936 3665',
-  card_holder: 'Mamadaliyev S',
-  support_username: '@uzbrry',
+  card_number: '8600 0000 0000 0000',
+  card_holder: 'Abdullayev Abdulla',
+  support_username: '@admin_support',
 };
 
 async function getSetting(key) {
