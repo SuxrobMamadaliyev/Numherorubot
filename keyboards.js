@@ -1,5 +1,6 @@
 const { Markup } = require('telegraf');
 const { SERVICES, COUNTRIES } = require('./herosms');
+const { getSetting } = require('./settings');
 
 function mainMenu(isAdmin = false) {
   const rows = [
@@ -57,8 +58,9 @@ function adminPanelKeyboard() {
     ],
     [
       Markup.button.callback('💳 Karta', 'adm_card'),
-      Markup.button.callback('📢 Majburiy kanal', 'adm_channel'),
+      Markup.button.callback('📢 Majburiy kanallar', 'adm_channel'),
     ],
+    [Markup.button.callback('🖼 Bosh menyu rasmi', 'adm_image')],
     [Markup.button.callback('📊 Statistika', 'adm_stats')],
     [Markup.button.callback('🔙 Bosh menyu', 'back_main')],
   ]);
@@ -86,6 +88,42 @@ function cancelActivationKeyboard(activationId) {
   ]);
 }
 
+// Asosiy menyuni (matn + tugmalar) admin tomonidan o'rnatilgan rasm bilan yoki rasmsiz chiqaradi.
+// edit=true bo'lsa, mavjud xabarni tahrirlashga harakat qiladi (callback orqali chaqirilganda).
+async function sendMainMenu(ctx, text, keyboard, { edit = false } = {}) {
+  const image = await getSetting('main_menu_image');
+
+  if (image) {
+    if (edit && ctx.callbackQuery) {
+      try {
+        await ctx.editMessageMedia(
+          { type: 'photo', media: image, caption: text, parse_mode: 'HTML' },
+          keyboard
+        );
+        return;
+      } catch (e) {
+        // Eski xabar rasm emas edi (matn xabar) — uni o'chirib, yangi rasm xabarini yuboramiz
+        try { await ctx.deleteMessage(); } catch {}
+      }
+    }
+    try {
+      await ctx.replyWithPhoto(image, { caption: text, parse_mode: 'HTML', ...keyboard });
+      return;
+    } catch (e) {
+      console.error('Bosh menyu rasmini yuborishda xato:', e.message);
+      // rasm yuborib bo'lmadi — pastda matn sifatida yuboramiz
+    }
+  }
+
+  if (edit && ctx.callbackQuery) {
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...keyboard });
+      return;
+    } catch {}
+  }
+  await ctx.reply(text, { parse_mode: 'HTML', ...keyboard });
+}
+
 module.exports = {
   mainMenu,
   servicesKeyboard,
@@ -95,4 +133,5 @@ module.exports = {
   backToMain,
   confirmBuyKeyboard,
   cancelActivationKeyboard,
+  sendMainMenu,
 };
