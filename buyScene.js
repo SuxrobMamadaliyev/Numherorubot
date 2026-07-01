@@ -260,12 +260,31 @@ function pollForCode(ctx, activationId, telegramId) {
 
   const check = async () => {
     if (Date.now() - startTime > MAX_WAIT) {
-      await Activation.updateOne({ activationId }, { status: 'timeout' });
-      await ctx.telegram.sendMessage(
-        telegramId,
-        '⏰ Vaqt tugadi (20 daqiqa). SMS kelmadi. Balans qaytarilmaydi (raqam band qilindi).',
-        backToMain()
-      );
+      const activation = await Activation.findOne({ activationId });
+
+      // Faqat hali "pending" bo'lgan (ya'ni muvaffaqiyatli yakunlanmagan/bekor qilinmagan)
+      // aktivatsiyalarga pul qaytariladi — boshqa holatda ikki marta qaytarib yubormaslik uchun
+      if (activation && activation.status === 'pending') {
+        try {
+          // HeroSMS tomonda ham raqamni bekor qilamiz, aks holda tizim uni band qilib qo'yadi
+          await setStatus(process.env.HEROSMS_API_KEY, activationId, 8); // cancel
+        } catch {}
+
+        await Activation.updateOne({ activationId }, { status: 'timeout' });
+        await User.updateOne(
+          { telegramId },
+          { $inc: { balance: activation.pricePaid, totalSpent: -activation.pricePaid } }
+        );
+
+        await ctx.telegram.sendMessage(
+          telegramId,
+          `⏰ <b>Vaqt tugadi (20 daqiqa)</b>\n${DIVIDER}\n` +
+          `📵 Nomerga SMS kelmadi.\n` +
+          `💰 To'langan <b>${activation.pricePaid.toLocaleString()} so'm</b> hisobingizga qaytarildi.`,
+          { parse_mode: 'HTML', ...backToMain() }
+        );
+      }
+
       delete activePolls[telegramId];
       return;
     }
@@ -307,12 +326,24 @@ async function handleCancelActivation(ctx, activationId) {
   await ctx.answerCbQuery();
   try {
     await setStatus(process.env.HEROSMS_API_KEY, activationId, 8); // cancel
+    const activation = await Activation.findOne({ activationId });
     await Activation.updateOne({ activationId }, { status: 'cancelled' });
     if (activePolls[ctx.from.id]) {
       clearTimeout(activePolls[ctx.from.id]);
       delete activePolls[ctx.from.id];
     }
-    await safeEdit(ctx, '🚫 Aktivatsiya bekor qilindi.', backToMain());
+
+    let text = '🚫 Aktivatsiya bekor qilindi.';
+    if (activation && activation.status === 'pending') {
+      await User.updateOne(
+        { telegramId: ctx.from.id },
+        { $inc: { balance: activation.pricePaid, totalSpent: -activation.pricePaid } }
+      );
+      text = `🚫 <b>Aktivatsiya bekor qilindi</b>\n${DIVIDER}\n` +
+        `💰 To'langan <b>${activation.pricePaid.toLocaleString()} so'm</b> hisobingizga qaytarildi.`;
+    }
+
+    await safeEdit(ctx, text, { parse_mode: 'HTML', ...backToMain() });
   } catch (e) {
     await safeEdit(ctx, '❌ Bekor qilishda xato: ' + e.message, backToMain());
   }
