@@ -36,6 +36,42 @@ function findCountry(code) {
   return COUNTRIES.find(c => c.code === code);
 }
 
+// Nomerni maxfiylash uchun oxirgi 4 ta raqamidan tashqarisini yulduzcha bilan yopadi
+function maskPhone(phone) {
+  const str = String(phone);
+  if (str.length <= 4) return str;
+  const last4 = str.slice(-4);
+  return '*'.repeat(str.length - 4) + last4;
+}
+
+// Har bir muvaffaqiyatli xariddan keyin "isbot" kanaliga post tashlaydi
+// (kanal sozlanmagan bo'lsa yoki bot admin bo'lmasa — indamay o'tkazib yuboradi)
+async function postProofToChannel(ctx, { countryName, phoneNumber }) {
+  const channel = await getSetting('proof_channel');
+  if (!channel) return;
+
+  const buyerName = ctx.from.username
+    ? `@${ctx.from.username}`
+    : (ctx.from.first_name || 'Foydalanuvchi');
+
+  const text =
+    `✅ <b>Yangi xarid amalga oshirildi!</b>\n${DIVIDER}\n` +
+    `🌍 Davlat: <b>${countryName}</b>\n` +
+    `📱 Nomer: <code>${maskPhone(phoneNumber)}</code>\n` +
+    `👤 Xaridor: ${buyerName}`;
+
+  try {
+    await ctx.telegram.sendMessage(channel, text, {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([
+        [Markup.button.url('🤖 Botga oʻtish', `https://t.me/${ctx.botInfo.username}`)],
+      ]),
+    });
+  } catch (e) {
+    console.error('Isbot kanaliga post yuborishda xato:', e.message);
+  }
+}
+
 // Narx hisoblash: dollardagi narxni so'mga o'tkazib, markup qo'shish
 async function calcPrice(costUSD) {
   const rate = await getSetting('usd_to_uzs');
@@ -249,6 +285,9 @@ async function handleConfirm(ctx, serviceCode, countryCode) {
     `⏳ SMS kutilmoqda (20 daqiqagacha)...`,
     { parse_mode: 'HTML', ...cancelActivationKeyboard(numData.activationId) }
   );
+
+  // Isbot kanaliga post (sozlangan bo'lsa)
+  postProofToChannel(ctx, { countryName: cnt.name, phoneNumber: numData.phoneNumber });
 
   // Polling boshlash
   pollForCode(ctx, numData.activationId, ctx.from.id);
