@@ -1,7 +1,7 @@
 const { Scenes, Markup } = require('telegraf');
 const { User } = require('./models');
 const { getAllSettings } = require('./settings');
-const { backToMain } = require('./keyboards');
+const { backToMain, safeEdit } = require('./keyboards');
 const { ADMIN_IDS } = require('./admin');
 
 // Waiting state: telegramId -> { step, method, amount, fee, credited }
@@ -25,7 +25,7 @@ async function showTopupMenu(ctx) {
   waiting[ctx.from.id] = { step: 'choose_method' };
 
   if (ctx.callbackQuery) {
-    await ctx.editMessageText(text, { parse_mode: 'HTML', ...methodKeyboard() });
+    await safeEdit(ctx, text, { parse_mode: 'HTML', ...methodKeyboard() });
   } else {
     await ctx.reply(text, { parse_mode: 'HTML', ...methodKeyboard() });
   }
@@ -55,7 +55,7 @@ function topupScene() {
       await ctx.answerCbQuery();
       waiting[ctx.from.id] = { step: 'amount', method: 'card' };
       const s = await getAllSettings();
-      return ctx.editMessageText(
+      return safeEdit(ctx, 
         `💳 <b>Karta orqali to'ldirish</b>\n\n` +
         `ℹ️ To'ldirishda <b>${s.topup_fee_percent}%</b> xizmat haqi ushlab qolinadi.\n\n` +
         `To'ldirish uchun summani kiriting (so'mda), masalan: <code>50000</code>`,
@@ -67,7 +67,7 @@ function topupScene() {
       await ctx.answerCbQuery();
       waiting[ctx.from.id] = { step: 'amount', method: 'stars' };
       const s = await getAllSettings();
-      return ctx.editMessageText(
+      return safeEdit(ctx, 
         `⭐ <b>Telegram Stars orqali to'ldirish</b>\n\n` +
         `ℹ️ Kurs: 1 ⭐ = ${s.star_to_uzs.toLocaleString()} so'm\n` +
         `✅ Bu usulda komissiya olinmaydi, balans darhol avtomatik to'ldiriladi.\n\n` +
