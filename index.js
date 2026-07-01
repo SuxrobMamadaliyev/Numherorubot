@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 
 const { User, Activation } = require('./models');
 const { isAdmin, adminOnly, ADMIN_IDS } = require('./admin');
-const { mainMenu, backToMain } = require('./keyboards');
+const { mainMenu, backToMain, sendMainMenu } = require('./keyboards');
 const { requireChannelSub } = require('./channelSub');
 
 const { adminScene, showAdminPanel } = require('./adminScene');
@@ -81,12 +81,14 @@ bot.start(async ctx => {
   const userDoc = await User.findOne({ telegramId: ctx.from.id });
   const balance = userDoc?.balance || 0;
 
-  await ctx.reply(
+  await sendMainMenu(
+    ctx,
     `👋 Assalomu alaykum, ${ctx.from.first_name}!\n\n` +
     `📱 Bu bot orqali turli xizmatlar uchun virtual raqamlar sotib olishingiz mumkin.\n\n` +
     `👛 Balansingiz: <b>${balance.toLocaleString()} so'm</b>\n\n` +
     `🔥 Eng arzon takliflarni koʻrish uchun pastdagi tugmani bosing.`,
-    { parse_mode: 'HTML', ...mainMenu(admin) }
+    mainMenu(admin),
+    { edit: false }
   );
 });
 
@@ -94,15 +96,12 @@ bot.start(async ctx => {
 bot.action('check_sub', async ctx => {
   const admin = isAdmin(ctx.from.id);
   await ctx.answerCbQuery('✅ Tekshirildi!');
-  try {
-    await ctx.editMessageText(
-      `👋 Xush kelibsiz, ${ctx.from.first_name}!\n\n` +
-      `Quyidagi menyudan foydalaning:`,
-      { parse_mode: 'HTML', ...mainMenu(admin) }
-    );
-  } catch {
-    await ctx.reply('🏠 Bosh menyu', mainMenu(admin));
-  }
+  await sendMainMenu(
+    ctx,
+    `👋 Xush kelibsiz, ${ctx.from.first_name}!\n\nQuyidagi menyudan foydalaning:`,
+    mainMenu(admin),
+    { edit: true }
+  );
 });
 
 // ================= MAIN MENU =================
@@ -112,11 +111,7 @@ bot.action('back_main', async ctx => {
   const userDoc = await User.findOne({ telegramId: ctx.from.id });
   const balance = userDoc?.balance || 0;
   const text = `🏠 <b>Bosh menyu</b>\n\n👛 Balansingiz: <b>${balance.toLocaleString()} so'm</b>`;
-  try {
-    await ctx.editMessageText(text, { parse_mode: 'HTML', ...mainMenu(admin) });
-  } catch {
-    await ctx.reply(text, { parse_mode: 'HTML', ...mainMenu(admin) });
-  }
+  await sendMainMenu(ctx, text, mainMenu(admin), { edit: true });
 });
 
 bot.action('help', async ctx => {
