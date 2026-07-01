@@ -19,6 +19,7 @@ async function showAdminPanel(ctx) {
     `📢 Majburiy kanallar: <b>${channels.length ? channels.length + ' ta' : 'oʻchirilgan'}</b>\n` +
     `🎁 Referal bonusi: <b>${(s.referral_bonus_uzs || 0).toLocaleString()} so'm</b>\n` +
     `🖼 Bosh menyu rasmi: <b>${s.main_menu_image ? 'oʻrnatilgan' : 'oʻrnatilmagan'}</b>\n` +
+    `🧾 Isbot kanali: <b>${s.proof_channel || 'oʻrnatilmagan'}</b>\n` +
     `💬 Support: <b>${s.support_username}</b>`;
 
   const keyboard = adminPanelKeyboard();
@@ -72,6 +73,10 @@ function adminScene() {
     adm_card:       { key: '_card_combo',        label: 'Karta raqami va egasini kiriting:\nFormat: KARTA_RAQAMI|Ism Familiya\nMasalan: 8600 1234 5678 9012|Karimov Karim' },
     adm_support:    { key: 'support_username',   label: 'Support username kiriting (masalan: @admin_support)' },
     adm_refbonus:   { key: 'referral_bonus_uzs', label: "Referal uchun beriladigan bonus miqdorini kiriting, so'mda (masalan: 3000)" },
+    adm_proofchannel: {
+      key: 'proof_channel',
+      label: "Isbot kanali username kiriting (masalan: @kanalim).\n❗️Bot shu kanalda admin boʻlishi shart, aks holda postlar yuborilmaydi.\nOʻchirish uchun \"-\" belgisini yuboring.",
+    },
   };
 
   // Inline button handler
@@ -258,6 +263,18 @@ function adminScene() {
         channels.push(channel);
         await setSetting('force_sub_channels', channels);
         await ctx.reply(`✅ Kanal qoʻshildi: ${channel}\n\n❗️Eslatma: botni shu kanalga admin qilib qoʻyishni unutmang, aks holda obuna tekshiruvi ishlamaydi.\n\n📋 Jami kanallar: ${channels.length} ta`, backToAdmin());
+      } else if (w.key === 'proof_channel') {
+        if (val === '-') {
+          await setSetting('proof_channel', '');
+          await ctx.reply('🗑 Isbot kanali oʻchirildi.', backToAdmin());
+        } else {
+          let channel = val;
+          if (!channel.startsWith('@') && !channel.startsWith('https://t.me/')) {
+            return ctx.reply("❌ Format xato! @username koʻrinishida kiriting.", backToAdmin());
+          }
+          await setSetting('proof_channel', channel);
+          await ctx.reply(`✅ Isbot kanali oʻrnatildi: ${channel}\n\n❗️Eslatma: botni shu kanalga admin qilib qoʻyishni unutmang.`, backToAdmin());
+        }
       } else {
         const numVal = parseFloat(val);
         if (['markup_percent', 'usd_to_uzs', 'topup_fee_percent', 'star_to_uzs', 'referral_bonus_uzs'].includes(w.key)) {
