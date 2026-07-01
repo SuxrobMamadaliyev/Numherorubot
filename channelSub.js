@@ -10,10 +10,6 @@ async function requireChannelSub(ctx, next) {
   const channels = (await getSetting('force_sub_channels')) || [];
   if (!channels.length) return next(); // Majburiy obuna o'chirilgan / kanal qo'shilmagan
 
-  // check_sub tugmasiga doim ruxsat beriladi (aks holda foydalanuvchi tekshira olmaydi)
-  const cbData = ctx.callbackQuery?.data;
-  if (cbData === 'check_sub') return next();
-
   const notJoined = [];
   for (const channel of channels) {
     try {
@@ -21,8 +17,11 @@ async function requireChannelSub(ctx, next) {
       const isMember = ['member', 'administrator', 'creator'].includes(member.status);
       if (!isMember) notJoined.push(channel);
     } catch (e) {
-      // Bot kanalda admin emas yoki kanal noto'g'ri — xavfsizlik uchun shu kanalni o'tkazib yuboramiz
+      // Tekshira olmadik (masalan, bot bu kanalda admin emas yoki manzil noto'g'ri).
+      // Xavfsizlik uchun bunday holatda ham foydalanuvchini "aʼzo bo'lmagan" deb hisoblaymiz,
+      // aks holda bu kanal doim o'tkazib yuborilib qoladi.
       console.error(`Kanal tekshiruvida xato (${channel}):`, e.message);
+      notJoined.push(channel);
     }
   }
 
