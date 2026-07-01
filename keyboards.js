@@ -125,6 +125,17 @@ async function sendMainMenu(ctx, text, keyboard, { edit = false } = {}) {
   await ctx.reply(text, { parse_mode: 'HTML', ...keyboard });
 }
 
+// Xabarni tahrirlashga urinadi; agar joriy xabar matn bo'lmasa (masalan rasm bo'lsa)
+// yoki boshqa sababdan tahrirlab bo'lmasa, eski xabarni o'chirib, yangisini yuboradi.
+async function safeEdit(ctx, text, extra = {}) {
+  try {
+    return await ctx.editMessageText(text, extra);
+  } catch (e) {
+    try { await ctx.deleteMessage(); } catch {}
+    return ctx.reply(text, extra);
+  }
+}
+
 module.exports = {
   mainMenu,
   servicesKeyboard,
@@ -135,4 +146,5 @@ module.exports = {
   confirmBuyKeyboard,
   cancelActivationKeyboard,
   sendMainMenu,
+  safeEdit,
 };
