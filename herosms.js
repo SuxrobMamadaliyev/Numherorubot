@@ -49,7 +49,15 @@ async function getBalance(apiKey) {
   throw new Error('Balans olishda xato: ' + data);
 }
 
-// Raqam narxini olish (dollarda)
+// Mamlakat kodidan chiroyli nom topish (mavjud bo'lmasa — kodni ko'rsatadi)
+function countryName(code) {
+  const c = COUNTRIES.find(x => x.code === String(code));
+  return c ? c.name : `🌍 Mamlakat #${code}`;
+}
+
+// Raqam narxini olish (dollarda).
+// MUHIM: xato yoki nomaʼlum javob holatida yolgʻon narx (masalan 0.1$) qaytarilmaydi —
+// buning oʻrniga ok:false qaytariladi, chaqiruvchi tomon foydalanuvchiga aniq xabar koʻrsatadi.
 async function getNumberPrice(apiKey, service, country) {
   try {
     const data = await apiRequest(apiKey, {
@@ -57,17 +65,64 @@ async function getNumberPrice(apiKey, service, country) {
       service,
       country,
     });
-    if (typeof data === 'object' && data[country]?.[service]) {
-      const info = data[country][service];
+    const info = typeof data === 'object' && data ? data[country]?.[service] : null;
+    if (info) {
       return {
         cost: parseFloat(info.cost || info.retail_price || 0),
         count: parseInt(info.count || 0),
+        ok: true,
       };
     }
-    return { cost: 0.1, count: 0 };
+    return { cost: 0, count: 0, ok: false };
   } catch {
-    return { cost: 0.1, count: 0 };
+    return { cost: 0, count: 0, ok: false };
   }
+}
+
+// Bitta servis uchun BARCHA mamlakatlar orasidan eng arzon va mavjud (count > 0) taklifni topadi
+async function getCheapestForService(apiKey, serviceCode) {
+  try {
+    const data = await apiRequest(apiKey, { action: 'getPrices', service: serviceCode });
+    if (typeof data !== 'object' || !data) return null;
+
+    let best = null;
+    for (const countryCode of Object.keys(data)) {
+      const info = data[countryCode]?.[serviceCode];
+      if (!info) continue;
+      const cost = parseFloat(info.cost || info.retail_price || 0);
+      const count = parseInt(info.count || 0);
+      if (count > 0 && cost > 0 && (!best || cost < best.cost)) {
+        best = { countryCode: String(countryCode), cost, count };
+      }
+    }
+    return best;
+  } catch {
+    return null;
+  }
+}
+
+// Barcha mashhur servislar boʻyicha eng arzon takliflarni topadi (2 daqiqa keshlanadi,
+// bu HeroSMS APIga ortiqcha soʻrov yubormaslik — "aniq va tejamli" ishlatish uchun)
+let cheapCache = { data: null, ts: 0 };
+const CHEAP_CACHE_TTL = 2 * 60 * 1000;
+
+async function getCheapOffers(apiKey, { force = false } = {}) {
+  const now = Date.now();
+  if (!force && cheapCache.data && now - cheapCache.ts < CHEAP_CACHE_TTL) {
+    return cheapCache.data;
+  }
+
+  const results = await Promise.all(
+    SERVICES.filter(s => s.code !== 'ot').map(async svc => {
+      const best = await getCheapestForService(apiKey, svc.code);
+      if (!best) return null;
+      return { service: svc, ...best };
+    })
+  );
+
+  const offers = results.filter(Boolean).sort((a, b) => a.cost - b.cost);
+  cheapCache = { data: offers, ts: now };
+  return offers;
 }
 
 async function getNumber(apiKey, service, country) {
@@ -104,5 +159,8 @@ module.exports = {
   getStatus,
   setStatus,
   getNumberPrice,
+  getCheapestForService,
+  getCheapOffers,
+  countryName,
   ERROR_MAP,
 };
