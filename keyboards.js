@@ -61,6 +61,7 @@ function adminPanelKeyboard() {
       Markup.button.callback('📢 Majburiy kanallar', 'adm_channel'),
     ],
     [Markup.button.callback('🎁 Referal bonusi', 'adm_refbonus')],
+    [Markup.button.callback('🧾 Isbot kanali', 'adm_proofchannel')],
     [Markup.button.callback('🖼 Bosh menyu rasmi', 'adm_image')],
     [Markup.button.callback('📊 Statistika', 'adm_stats')],
     [Markup.button.callback('🔙 Bosh menyu', 'back_main')],
