@@ -52,7 +52,59 @@ async function getBalance(apiKey) {
 // Mamlakat kodidan chiroyli nom topish (mavjud bo'lmasa — kodni ko'rsatadi)
 function countryName(code) {
   const c = COUNTRIES.find(x => x.code === String(code));
-  return c ? c.name : `🌍 Mamlakat #${code}`;
+  if (c) return c.name;
+  const meta = countryListCache.data && countryListCache.data[String(code)];
+  if (meta) return `🌍 ${meta.eng || meta.rus || code}`;
+  return `🌍 Mamlakat #${code}`;
+}
+
+// HeroSMS APIdagi BARCHA mamlakatlar roʻyxati (id -> {eng, rus, ...}).
+// 24 soat keshlanadi — bu roʻyxat kamdan-kam oʻzgaradi.
+let countryListCache = { data: null, ts: 0 };
+const COUNTRY_LIST_TTL = 24 * 60 * 60 * 1000;
+
+async function getAllCountries(apiKey) {
+  const now = Date.now();
+  if (countryListCache.data && now - countryListCache.ts < COUNTRY_LIST_TTL) {
+    return countryListCache.data;
+  }
+  try {
+    const data = await apiRequest(apiKey, { action: 'getCountries' });
+    if (typeof data === 'object' && data) {
+      countryListCache = { data, ts: now };
+      return data;
+    }
+  } catch {}
+  return countryListCache.data || {};
+}
+
+// Bitta servis uchun APIdagi BARCHA mamlakatlar boʻyicha narx/mavjudlikni qaytaradi
+// (faqat mavjud, ya'ni count > 0 boʻlganlarini) — mamlakat nomi bilan birga.
+async function getAllOffersForService(apiKey, serviceCode) {
+  const [prices, countries] = await Promise.all([
+    apiRequest(apiKey, { action: 'getPrices', service: serviceCode }),
+    getAllCountries(apiKey),
+  ]);
+
+  if (typeof prices !== 'object' || !prices) return [];
+
+  const offers = [];
+  for (const code of Object.keys(prices)) {
+    const info = prices[code]?.[serviceCode];
+    if (!info) continue;
+    const cost = parseFloat(info.cost || info.retail_price || 0);
+    const count = parseInt(info.count || 0);
+    if (!(cost > 0) || count <= 0) continue;
+
+    const staticC = COUNTRIES.find(x => x.code === String(code));
+    const meta = countries?.[code];
+    const name = staticC ? staticC.name : `🌍 ${meta?.eng || meta?.rus || `Mamlakat #${code}`}`;
+
+    offers.push({ code: String(code), name, cost, count });
+  }
+
+  offers.sort((a, b) => a.cost - b.cost);
+  return offers;
 }
 
 // Raqam narxini olish (dollarda).
@@ -161,6 +213,8 @@ module.exports = {
   getNumberPrice,
   getCheapestForService,
   getCheapOffers,
+  getAllCountries,
+  getAllOffersForService,
   countryName,
   ERROR_MAP,
 };
