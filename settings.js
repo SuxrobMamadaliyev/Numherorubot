@@ -9,7 +9,7 @@ const DEFAULTS = {
   referral_bonus_uzs: 10,    // Referal uchun bonus (so'm)
   card_number: '9860 1678 4936 3665',
   card_holder: 'Suhrob M',
-  support_username: '@uzbrry',
+  support_username: '@suxacyber404',
   force_sub_channels: [],      // Majburiy obuna kanallari roʻyxati (masalan: ['@kanal1', '@kanal2']). Cheksiz qoʻshish mumkin.
   main_menu_image: '',         // Asosiy menyu tugmalari ustida chiqadigan rasm (Telegram file_id). Bo'sh bo'lsa — rasm yo'q.
   proof_channel: '',           // Har bir xariddan keyin "isbot" post yuboriladigan kanal (masalan: @kanalim). Bo'sh bo'lsa — yuborilmaydi.
