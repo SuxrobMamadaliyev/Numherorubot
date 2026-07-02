@@ -1,6 +1,6 @@
 const { Markup } = require('telegraf');
 const { User, Activation } = require('./models');
-const { getSetting } = require('./settings');
+const { getSetting, calcPriceUZS } = require('./settings');
 const {
   getNumber,
   getStatus,
@@ -16,12 +16,16 @@ const {
 const {
   servicesKeyboard,
   countriesKeyboard,
+  allCountriesKeyboard,
   confirmBuyKeyboard,
   cancelActivationKeyboard,
   backToMain,
   mainMenu,
   safeEdit,
 } = require('./keyboards');
+
+// Barcha davlatlar (API dan) koʻrsatiladigan servislar. Hozircha faqat Telegram ('tg').
+const FULL_COUNTRY_LIST_SERVICES = ['tg'];
 const { isAdmin } = require('./admin');
 
 const DIVIDER = '➖➖➖➖➖➖➖➖➖➖';
@@ -73,13 +77,7 @@ async function postProofToChannel(ctx, { countryName, phoneNumber }) {
 }
 
 // Narx hisoblash: dollardagi narxni so'mga o'tkazib, markup qo'shish
-async function calcPrice(costUSD) {
-  const rate = await getSetting('usd_to_uzs');
-  const markup = await getSetting('markup_percent');
-  const base = costUSD * rate;
-  const final = Math.ceil(base * (1 + markup / 100) / 100) * 100; // 100 so'mga yaxlitlash
-  return final;
-}
+const calcPrice = calcPriceUZS;
 
 async function showServices(ctx) {
   const text =
@@ -97,6 +95,35 @@ async function handleServiceSelect(ctx, serviceCode) {
   await ctx.answerCbQuery();
   const svc = findService(serviceCode);
   if (!svc) return;
+
+  // Ba'zi servislar (masalan Telegram) uchun HeroSMS APIdagi BARCHA mavjud
+  // davlatlarni, har birining narxi (so'mda) bilan birga koʻrsatamiz.
+  if (FULL_COUNTRY_LIST_SERVICES.includes(serviceCode)) {
+    try {
+      await safeEdit(ctx,
+        `${svc.name}\n${DIVIDER}\n⏳ Barcha mamlakatlar va narxlar yuklanmoqda...`,
+        { parse_mode: 'HTML' }
+      );
+    } catch {}
+
+    const { keyboard, count, shown } = await allCountriesKeyboard(process.env.HEROSMS_API_KEY, serviceCode);
+
+    if (!count) {
+      return safeEdit(ctx,
+        `📭 <b>Hozircha mavjud emas</b>\n${DIVIDER}\n` +
+        `${svc.name} uchun hech qaysi mamlakatda raqam topilmadi. Birozdan keyin urinib koʻring.`,
+        { parse_mode: 'HTML', ...backToMain() }
+      );
+    }
+
+    const note = shown < count ? `\n\n(Eng arzon ${shown} ta koʻrsatilmoqda, jami mavjud: ${count} ta)` : '';
+    return safeEdit(ctx,
+      `${svc.name}\n${DIVIDER}\n🌍 Mamlakatni tanlang (${shown} ta mavjud):\n\n` +
+      `💰 Narx har bir davlat yonida so'mda koʻrsatilgan.${note}`,
+      { parse_mode: 'HTML', ...keyboard }
+    );
+  }
+
   await safeEdit(ctx, 
     `${svc.name}\n${DIVIDER}\n🌍 Mamlakatni tanlang:\n\n` +
     `💡 Qaysi mamlakat arzonroqligini bilmasangiz — <b>"🔥 Eng arzonini avtomatik tanlash"</b> tugmasini bosing.`,
