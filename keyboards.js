@@ -1,6 +1,6 @@
 const { Markup } = require('telegraf');
-const { SERVICES, COUNTRIES } = require('./herosms');
-const { getSetting } = require('./settings');
+const { SERVICES, COUNTRIES, getAllOffersForService } = require('./herosms');
+const { getSetting, calcPriceUZS } = require('./settings');
 
 function mainMenu(isAdmin = false) {
   const rows = [
@@ -44,6 +44,31 @@ function countriesKeyboard(serviceCode) {
   rows.push([Markup.button.callback('🔥 Eng arzonini avtomatik tanlash', `cheapest_${serviceCode}`)]);
   rows.push([Markup.button.callback('🔙 Servislar', 'buy_number')]);
   return Markup.inlineKeyboard(rows);
+}
+
+// HeroSMS APIdagi BARCHA (mavjud) mamlakatlarni, har birining narxi bilan (so'mda)
+// koʻrsatadigan klaviatura. Eng arzonidan qimmatiga qarab saralangan.
+// Faqat hozircha raqami mavjud (count > 0) davlatlar chiqadi.
+const MAX_COUNTRY_BUTTONS = 80; // Telegram inline klaviatura limitidan xavfsiz chegara
+
+async function allCountriesKeyboard(apiKey, serviceCode) {
+  const offers = await getAllOffersForService(apiKey, serviceCode);
+  const shown = offers.slice(0, MAX_COUNTRY_BUTTONS);
+
+  const rows = [];
+  for (const o of shown) {
+    const priceUZS = await calcPriceUZS(o.cost);
+    rows.push([
+      Markup.button.callback(
+        `${o.name} — ${priceUZS.toLocaleString()} so'm`,
+        `cnt_${serviceCode}_${o.code}`
+      ),
+    ]);
+  }
+
+  rows.push([Markup.button.callback('🔥 Eng arzonini avtomatik tanlash', `cheapest_${serviceCode}`)]);
+  rows.push([Markup.button.callback('🔙 Servislar', 'buy_number')]);
+  return { keyboard: Markup.inlineKeyboard(rows), count: offers.length, shown: shown.length };
 }
 
 function adminPanelKeyboard() {
@@ -141,6 +166,7 @@ module.exports = {
   mainMenu,
   servicesKeyboard,
   countriesKeyboard,
+  allCountriesKeyboard,
   adminPanelKeyboard,
   backToAdmin,
   backToMain,
