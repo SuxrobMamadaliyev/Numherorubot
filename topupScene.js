@@ -184,20 +184,24 @@ function topupScene() {
 
 // Karta orqali to'lovni admin tasdiqlaganda chaqiriladi
 async function approveTopup(ctx, targetUserId, credited, fee) {
-  await User.findOneAndUpdate(
+  const updated = await User.findOneAndUpdate(
     { telegramId: targetUserId },
     { $inc: { balance: credited, totalFeeCollected: fee } },
-    { upsert: true }
+    { upsert: true, new: true }
   );
   try {
     await ctx.telegram.sendMessage(
       targetUserId,
       `✅ Balansingiz to'ldirildi!\n\n` +
       `➕ Qo'shildi: <b>${credited.toLocaleString()} so'm</b>\n` +
-      `📉 Xizmat haqi (ushlab qolindi): <b>${fee.toLocaleString()} so'm</b>`,
+      `📉 Xizmat haqi (ushlab qolindi): <b>${fee.toLocaleString()} so'm</b>\n` +
+      `👛 Joriy balans: <b>${updated.balance.toLocaleString()} so'm</b>`,
       { parse_mode: 'HTML' }
     );
-  } catch {}
+  } catch (e) {
+    console.error('Foydalanuvchiga xabar yuborishda xato:', e.message);
+  }
+  return updated;
 }
 
 // Stars orqali to'lov muvaffaqiyatli bo'lganda chaqiriladi (index.js dagi successful_payment handlerida)
