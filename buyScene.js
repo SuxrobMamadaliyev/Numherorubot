@@ -33,6 +33,9 @@ const DIVIDER = '➖➖➖➖➖➖➖➖➖➖';
 // Faol polllar: telegramId -> timeout
 const activePolls = {};
 
+// SMS kutish vaqti (necha millisekunddan keyin avtomatik bekor qilib pul qaytariladi)
+const MAX_WAIT = 2 * 60 * 1000; // 2 daqiqa
+
 function findService(code) {
   return SERVICES.find(s => s.code === code);
 }
@@ -309,7 +312,7 @@ async function handleConfirm(ctx, serviceCode, countryCode) {
     `🔧 Servis: <b>${svc.name}</b>\n` +
     `🌍 Mamlakat: <b>${cnt.name}</b>\n` +
     `💰 To'landi: <b>${priceUZS.toLocaleString()} so'm</b>\n${DIVIDER}\n` +
-    `⏳ SMS kutilmoqda (20 daqiqagacha)...`,
+    `⏳ SMS kutilmoqda (${Math.round(MAX_WAIT / 60000)} daqiqagacha)...`,
     { parse_mode: 'HTML', ...cancelActivationKeyboard(numData.activationId) }
   );
 
@@ -322,35 +325,10 @@ async function handleConfirm(ctx, serviceCode, countryCode) {
 
 function pollForCode(ctx, activationId, telegramId) {
   const startTime = Date.now();
-  const MAX_WAIT = 20 * 60 * 1000;
 
   const check = async () => {
     if (Date.now() - startTime > MAX_WAIT) {
-      const activation = await Activation.findOne({ activationId });
-
-      // Faqat hali "pending" bo'lgan (ya'ni muvaffaqiyatli yakunlanmagan/bekor qilinmagan)
-      // aktivatsiyalarga pul qaytariladi — boshqa holatda ikki marta qaytarib yubormaslik uchun
-      if (activation && activation.status === 'pending') {
-        try {
-          // HeroSMS tomonda ham raqamni bekor qilamiz, aks holda tizim uni band qilib qo'yadi
-          await setStatus(process.env.HEROSMS_API_KEY, activationId, 8); // cancel
-        } catch {}
-
-        await Activation.updateOne({ activationId }, { status: 'timeout' });
-        await User.updateOne(
-          { telegramId },
-          { $inc: { balance: activation.pricePaid, totalSpent: -activation.pricePaid } }
-        );
-
-        await ctx.telegram.sendMessage(
-          telegramId,
-          `⏰ <b>Vaqt tugadi (20 daqiqa)</b>\n${DIVIDER}\n` +
-          `📵 Nomerga SMS kelmadi.\n` +
-          `💰 To'langan <b>${activation.pricePaid.toLocaleString()} so'm</b> hisobingizga qaytarildi.`,
-          { parse_mode: 'HTML', ...backToMain() }
-        );
-      }
-
+      await refundIfExpired(activationId, telegramId, ctx.telegram);
       delete activePolls[telegramId];
       return;
     }
@@ -388,19 +366,72 @@ function pollForCode(ctx, activationId, telegramId) {
   activePolls[telegramId] = setTimeout(check, 3000);
 }
 
+// Pending aktivatsiyani atomik ravishda "timeout" ga o'tkazadi va pulni qaytaradi.
+// findOneAndUpdate faqat hali "pending" bo'lgan hujjatni topsa ishlaydi — shu tufayli
+// pollForCode va watchdog bir xil aktivatsiyani ikki marta qaytarib yubormaydi.
+async function refundIfExpired(activationId, telegramId, telegram) {
+  const activation = await Activation.findOneAndUpdate(
+    { activationId, status: 'pending' },
+    { status: 'timeout' }
+  );
+  if (!activation) return; // allaqachon yakunlangan/bekor qilingan/qaytarilgan
+
+  try {
+    await setStatus(process.env.HEROSMS_API_KEY, activationId, 8); // HeroSMS'da ham bekor qilamiz
+  } catch {}
+
+  await User.updateOne(
+    { telegramId },
+    { $inc: { balance: activation.pricePaid, totalSpent: -activation.pricePaid } }
+  );
+
+  try {
+    await telegram.sendMessage(
+      telegramId,
+      `⏰ <b>Vaqt tugadi (${Math.round(MAX_WAIT / 60000)} daqiqa)</b>\n${DIVIDER}\n` +
+      `📵 Nomerga SMS kelmadi.\n` +
+      `💰 To'langan <b>${activation.pricePaid.toLocaleString()} so'm</b> hisobingizga qaytarildi.`,
+      { parse_mode: 'HTML', ...backToMain() }
+    );
+  } catch {}
+}
+
+// Bot qayta ishga tushganda ham (Render uxlab qolishi / qayta deploy bo'lishi) hech qanday
+// pending aktivatsiya "osilib qolmasligi" uchun DB'ni davriy tekshirib turadigan qo'riqchi.
+// Bu setTimeout'larga bog'liq bo'lmagani uchun process qayta boshlansa ham ishlayveradi.
+const WATCHDOG_INTERVAL = 20 * 1000; // 20 soniyada bir tekshiradi
+
+function startExpiryWatchdog(bot) {
+  setInterval(async () => {
+    try {
+      const cutoff = new Date(Date.now() - MAX_WAIT);
+      const expired = await Activation.find({ status: 'pending', createdAt: { $lte: cutoff } }).lean();
+      for (const act of expired) {
+        await refundIfExpired(act.activationId, act.telegramId, bot.telegram);
+      }
+    } catch (e) {
+      console.error('Watchdog xatosi:', e.message);
+    }
+  }, WATCHDOG_INTERVAL);
+}
+
 async function handleCancelActivation(ctx, activationId) {
   await ctx.answerCbQuery();
   try {
     await setStatus(process.env.HEROSMS_API_KEY, activationId, 8); // cancel
-    const activation = await Activation.findOne({ activationId });
-    await Activation.updateOne({ activationId }, { status: 'cancelled' });
+    // Atomik: faqat hali "pending" bo'lsa "cancelled" ga o'tkazamiz va pulni qaytaramiz —
+    // shu tufayli watchdog/poll bilan bir vaqtga to'g'ri kelib ikki marta qaytarib yuborilmaydi.
+    const activation = await Activation.findOneAndUpdate(
+      { activationId, status: 'pending' },
+      { status: 'cancelled' }
+    );
     if (activePolls[ctx.from.id]) {
       clearTimeout(activePolls[ctx.from.id]);
       delete activePolls[ctx.from.id];
     }
 
     let text = '🚫 Aktivatsiya bekor qilindi.';
-    if (activation && activation.status === 'pending') {
+    if (activation) {
       await User.updateOne(
         { telegramId: ctx.from.id },
         { $inc: { balance: activation.pricePaid, totalSpent: -activation.pricePaid } }
@@ -423,4 +454,5 @@ module.exports = {
   showCheapNumbers,
   handleConfirm,
   handleCancelActivation,
+  startExpiryWatchdog,
 };
