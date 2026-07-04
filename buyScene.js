@@ -24,17 +24,14 @@ const {
   safeEdit,
 } = require('./keyboards');
 
-// Barcha davlatlar (API dan) koʻrsatiladigan servislar. Hozircha faqat Telegram ('tg').
 const FULL_COUNTRY_LIST_SERVICES = ['tg'];
 const { isAdmin } = require('./admin');
 
 const DIVIDER = '➖➖➖➖➖➖➖➖➖➖';
 
-// Faol polllar: telegramId -> timeout
 const activePolls = {};
 
-// SMS kutish vaqti (necha millisekunddan keyin avtomatik bekor qilib pul qaytariladi)
-const MAX_WAIT = 2 * 60 * 1000; // 2 daqiqa
+const MAX_WAIT = 2 * 60 * 1000; // 2 минуты
 
 function findService(code) {
   return SERVICES.find(s => s.code === code);
@@ -43,7 +40,6 @@ function findCountry(code) {
   return COUNTRIES.find(c => c.code === code);
 }
 
-// Nomerni maxfiylash uchun oxirgi 4 ta raqamidan tashqarisini yulduzcha bilan yopadi
 function maskPhone(phone) {
   const str = String(phone);
   if (str.length <= 4) return str;
@@ -51,42 +47,39 @@ function maskPhone(phone) {
   return '*'.repeat(str.length - 4) + last4;
 }
 
-// Har bir muvaffaqiyatli xariddan keyin "isbot" kanaliga post tashlaydi
-// (kanal sozlanmagan bo'lsa yoki bot admin bo'lmasa — indamay o'tkazib yuboradi)
 async function postProofToChannel(ctx, { countryName, phoneNumber }) {
   const channel = await getSetting('proof_channel');
   if (!channel) return;
 
   const buyerName = ctx.from.username
     ? `@${ctx.from.username}`
-    : (ctx.from.first_name || 'Foydalanuvchi');
+    : (ctx.from.first_name || 'Пользователь');
 
   const text =
-    `✅ <b>Yangi xarid amalga oshirildi!</b>\n${DIVIDER}\n` +
-    `🌍 Davlat: <b>${countryName}</b>\n` +
-    `📱 Nomer: <code>${maskPhone(phoneNumber)}</code>\n` +
-    `👤 Xaridor: ${buyerName}`;
+    `✅ <b>Новая покупка совершена!</b>\n${DIVIDER}\n` +
+    `🌍 Страна: <b>${countryName}</b>\n` +
+    `📱 Номер: <code>${maskPhone(phoneNumber)}</code>\n` +
+    `👤 Покупатель: ${buyerName}`;
 
   try {
     await ctx.telegram.sendMessage(channel, text, {
       parse_mode: 'HTML',
       ...Markup.inlineKeyboard([
-        [Markup.button.url('🤖 Botga oʻtish', `https://t.me/${ctx.botInfo.username}`)],
+        [Markup.button.url('🤖 Перейти в бот', `https://t.me/${ctx.botInfo.username}`)],
       ]),
     });
   } catch (e) {
-    console.error('Isbot kanaliga post yuborishda xato:', e.message);
+    console.error('Ошибка отправки поста в канал доказательств:', e.message);
   }
 }
 
-// Narx hisoblash: dollardagi narxni so'mga o'tkazib, markup qo'shish
 const calcPrice = calcPriceUZS;
 
 async function showServices(ctx) {
   const text =
-    `📱 <b>Servisni tanlang</b>\n${DIVIDER}\n` +
-    `Kerakli xizmatni bosing, keyin mamlakatni tanlaysiz.\n\n` +
-    `💡 Shoshilmasangiz — pastdagi <b>🔥 Eng arzon takliflar</b> tugmasi orqali eng arzon variantlarni darhol koʻrishingiz mumkin.`;
+    `📱 <b>Выберите сервис</b>\n${DIVIDER}\n` +
+    `Нажмите на нужный сервис, затем выберите страну.\n\n` +
+    `💡 Если не спешите — кнопка <b>🔥 Самые дешёвые предложения</b> покажет лучшие варианты сразу.`;
   if (ctx.callbackQuery) {
     await safeEdit(ctx, text, { parse_mode: 'HTML', ...servicesKeyboard() });
   } else {
@@ -99,12 +92,10 @@ async function handleServiceSelect(ctx, serviceCode) {
   const svc = findService(serviceCode);
   if (!svc) return;
 
-  // Ba'zi servislar (masalan Telegram) uchun HeroSMS APIdagi BARCHA mavjud
-  // davlatlarni, har birining narxi (so'mda) bilan birga koʻrsatamiz.
   if (FULL_COUNTRY_LIST_SERVICES.includes(serviceCode)) {
     try {
       await safeEdit(ctx,
-        `${svc.name}\n${DIVIDER}\n⏳ Barcha mamlakatlar va narxlar yuklanmoqda...`,
+        `${svc.name}\n${DIVIDER}\n⏳ Загружаем все страны и цены...`,
         { parse_mode: 'HTML' }
       );
     } catch {}
@@ -113,30 +104,27 @@ async function handleServiceSelect(ctx, serviceCode) {
 
     if (!count) {
       return safeEdit(ctx,
-        `📭 <b>Hozircha mavjud emas</b>\n${DIVIDER}\n` +
-        `${svc.name} uchun hech qaysi mamlakatda raqam topilmadi. Birozdan keyin urinib koʻring.`,
+        `📭 <b>Пока недоступно</b>\n${DIVIDER}\n` +
+        `Для ${svc.name} нет номеров ни в одной стране. Попробуйте позже.`,
         { parse_mode: 'HTML', ...backToMain() }
       );
     }
 
-    const note = shown < count ? `\n\n(Eng arzon ${shown} ta koʻrsatilmoqda, jami mavjud: ${count} ta)` : '';
+    const note = shown < count ? `\n\n(Показаны ${shown} самых дешёвых из ${count} доступных)` : '';
     return safeEdit(ctx,
-      `${svc.name}\n${DIVIDER}\n🌍 Mamlakatni tanlang (${shown} ta mavjud):\n\n` +
-      `💰 Narx har bir davlat yonida so'mda koʻrsatilgan.${note}`,
+      `${svc.name}\n${DIVIDER}\n🌍 Выберите страну (${shown} доступно):\n\n` +
+      `💰 Цена рядом с каждой страной указана в сумах.${note}`,
       { parse_mode: 'HTML', ...keyboard }
     );
   }
 
-  await safeEdit(ctx, 
-    `${svc.name}\n${DIVIDER}\n🌍 Mamlakatni tanlang:\n\n` +
-    `💡 Qaysi mamlakat arzonroqligini bilmasangiz — <b>"🔥 Eng arzonini avtomatik tanlash"</b> tugmasini bosing.`,
+  await safeEdit(ctx,
+    `${svc.name}\n${DIVIDER}\n🌍 Выберите страну:\n\n` +
+    `💡 Если не знаете, где дешевле — нажмите <b>«🔥 Выбрать самый дешёвый автоматически»</b>.`,
     { parse_mode: 'HTML', ...countriesKeyboard(serviceCode) }
   );
 }
 
-// Tanlangan servis/mamlakat uchun buyurtma xulosasini chiqaradi.
-// Bu funksiya ctx.answerCbQuery() ni ICHIDA chaqirmaydi — buni chaqiruvchi oʻzi bajaradi
-// (bir xabarga ikki marta answerCbQuery yuborilib qolmasligi uchun).
 async function renderCountryOffer(ctx, serviceCode, countryCode) {
   const svc = findService(serviceCode);
   const cnt = findCountry(countryCode) || { code: countryCode, name: countryName(countryCode) };
@@ -144,21 +132,20 @@ async function renderCountryOffer(ctx, serviceCode, countryCode) {
 
   const { cost, count, ok } = await getNumberPrice(process.env.HEROSMS_API_KEY, serviceCode, countryCode);
 
-  // Narx aniqlanmasa — foydalanuvchiga yolgʻon/tasodifiy narx koʻrsatmaymiz
   if (!ok) {
-    return safeEdit(ctx, 
-      `⚠️ <b>Narxni aniqlab boʻlmadi</b>\n${DIVIDER}\n` +
-      `${svc.name} — ${cnt.name} uchun HeroSMS serveridan javob olinmadi.\n` +
-      `Birozdan keyin qaytadan urinib koʻring.`,
+    return safeEdit(ctx,
+      `⚠️ <b>Не удалось получить цену</b>\n${DIVIDER}\n` +
+      `Сервер HeroSMS не ответил для ${svc.name} — ${cnt.name}.\n` +
+      `Попробуйте позже.`,
       { parse_mode: 'HTML', ...countriesKeyboard(serviceCode) }
     );
   }
 
   if (count <= 0 || !(cost > 0)) {
-    return safeEdit(ctx, 
-      `📭 <b>Raqamlar tugagan</b>\n${DIVIDER}\n` +
-      `${svc.name} — ${cnt.name} uchun hozircha mavjud raqam yoʻq.\n` +
-      `Boshqa mamlakatni tanlang yoki "🔥 Eng arzonini avtomatik tanlash"dan foydalaning.`,
+    return safeEdit(ctx,
+      `📭 <b>Номера закончились</b>\n${DIVIDER}\n` +
+      `Для ${svc.name} — ${cnt.name} сейчас нет доступных номеров.\n` +
+      `Выберите другую страну или воспользуйтесь «🔥 Выбрать самый дешёвый автоматически».`,
       { parse_mode: 'HTML', ...countriesKeyboard(serviceCode) }
     );
   }
@@ -170,15 +157,15 @@ async function renderCountryOffer(ctx, serviceCode, countryCode) {
   const enough = balance >= priceUZS;
 
   const text =
-    `📋 <b>Buyurtma maʼlumotlari</b>\n${DIVIDER}\n` +
-    `🔧 Servis: <b>${svc.name}</b>\n` +
-    `🌍 Mamlakat: <b>${cnt.name}</b>\n` +
-    `💰 Narx: <b>${priceUZS.toLocaleString()} so'm</b>\n` +
-    `📦 Mavjud raqamlar: <b>${count} dona</b>\n${DIVIDER}\n` +
-    `👛 Balansingiz: <b>${balance.toLocaleString()} so'm</b>\n\n` +
+    `📋 <b>Информация о заказе</b>\n${DIVIDER}\n` +
+    `🔧 Сервис: <b>${svc.name}</b>\n` +
+    `🌍 Страна: <b>${cnt.name}</b>\n` +
+    `💰 Цена: <b>${priceUZS.toLocaleString()} сум</b>\n` +
+    `📦 Доступно номеров: <b>${count} шт.</b>\n${DIVIDER}\n` +
+    `👛 Ваш баланс: <b>${balance.toLocaleString()} сум</b>\n\n` +
     (enough
-      ? `✅ Balans yetarli. Tasdiqlaysizmi?`
-      : `❌ Balans yetarli emas. Iltimos, avval balansni toʻldiring.`);
+      ? `✅ Баланса достаточно. Подтвердить?`
+      : `❌ Недостаточно средств. Пожалуйста, пополните баланс.`);
 
   await safeEdit(ctx, text, {
     parse_mode: 'HTML',
@@ -187,22 +174,20 @@ async function renderCountryOffer(ctx, serviceCode, countryCode) {
 }
 
 async function handleCountrySelect(ctx, serviceCode, countryCode) {
-  await ctx.answerCbQuery('⏳ Narx tekshirilmoqda...');
+  await ctx.answerCbQuery('⏳ Проверяем цену...');
   await renderCountryOffer(ctx, serviceCode, countryCode);
 }
 
-// "Eng arzonini avtomatik tanlash" — servis uchun barcha mamlakatlar orasidan eng arzonini topib,
-// toʻgʻridan-toʻgʻri buyurtma xulosasiga oʻtkazadi (foydalanuvchiga qulaylik uchun)
 async function handleCheapestForService(ctx, serviceCode) {
-  await ctx.answerCbQuery('⏳ Eng arzon mamlakat qidirilmoqda...');
+  await ctx.answerCbQuery('⏳ Ищем самую дешёвую страну...');
   const svc = findService(serviceCode);
   if (!svc) return;
 
   const best = await getCheapestForService(process.env.HEROSMS_API_KEY, serviceCode);
   if (!best) {
-    return safeEdit(ctx, 
-      `📭 <b>Hozircha mavjud emas</b>\n${DIVIDER}\n` +
-      `${svc.name} uchun hech qaysi mamlakatda raqam topilmadi. Birozdan keyin urinib koʻring.`,
+    return safeEdit(ctx,
+      `📭 <b>Пока недоступно</b>\n${DIVIDER}\n` +
+      `Для ${svc.name} нет доступных номеров ни в одной стране. Попробуйте позже.`,
       { parse_mode: 'HTML', ...countriesKeyboard(serviceCode) }
     );
   }
@@ -210,12 +195,11 @@ async function handleCheapestForService(ctx, serviceCode) {
   await renderCountryOffer(ctx, serviceCode, best.countryCode);
 }
 
-// "🔥 Arzon nomerlar" — barcha mashhur servislar boʻyicha eng arzon takliflar roʻyxati
 async function showCheapNumbers(ctx) {
-  await ctx.answerCbQuery('⏳ Qidirilmoqda...');
+  await ctx.answerCbQuery('⏳ Поиск...');
   try {
-    await safeEdit(ctx, 
-      `🔥 <b>Eng arzon takliflar qidirilmoqda...</b>\n\n⏳ Iltimos, kuting (bir necha soniya)...`,
+    await safeEdit(ctx,
+      `🔥 <b>Ищем самые дешёвые предложения...</b>\n\n⏳ Пожалуйста, подождите несколько секунд...`,
       { parse_mode: 'HTML' }
     );
   } catch {}
@@ -223,54 +207,53 @@ async function showCheapNumbers(ctx) {
   const offers = await getCheapOffers(process.env.HEROSMS_API_KEY);
 
   if (!offers.length) {
-    return safeEdit(ctx, 
-      `❌ <b>Hozircha takliflar topilmadi</b>\n${DIVIDER}\n` +
-      `HeroSMS serverida vaqtinchalik nosozlik boʻlishi mumkin. Birozdan keyin qaytadan urinib koʻring.`,
+    return safeEdit(ctx,
+      `❌ <b>Предложения не найдены</b>\n${DIVIDER}\n` +
+      `Возможно, временные проблемы на сервере HeroSMS. Попробуйте позже.`,
       { parse_mode: 'HTML', ...backToMain() }
     );
   }
 
   const top = offers.slice(0, 8);
   const rows = [];
-  let text = `🔥 <b>Eng arzon nomerlar</b> (TOP-${top.length})\n${DIVIDER}\n\n`;
+  let text = `🔥 <b>Самые дешёвые номера</b> (ТОП-${top.length})\n${DIVIDER}\n\n`;
 
   for (const o of top) {
     const priceUZS = await calcPrice(o.cost);
     const cName = countryName(o.countryCode);
-    text += `${o.service.name} — ${cName}\n💰 <b>${priceUZS.toLocaleString()} so'm</b>  ·  📦 ${o.count} dona\n\n`;
+    text += `${o.service.name} — ${cName}\n💰 <b>${priceUZS.toLocaleString()} сум</b>  ·  📦 ${o.count} шт.\n\n`;
     rows.push([
       Markup.button.callback(
-        `${o.service.name} — ${priceUZS.toLocaleString()} so'm`,
+        `${o.service.name} — ${priceUZS.toLocaleString()} сум`,
         `cnt_${o.service.code}_${o.countryCode}`
       ),
     ]);
   }
 
-  text += `💡 Har qanday taklifni bosib, darhol xarid qilishingiz mumkin.`;
-  rows.push([Markup.button.callback('🔙 Bosh menyu', 'back_main')]);
+  text += `💡 Нажмите на любое предложение, чтобы сразу купить.`;
+  rows.push([Markup.button.callback('🔙 Главное меню', 'back_main')]);
 
   await safeEdit(ctx, text, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
 }
 
 async function handleConfirm(ctx, serviceCode, countryCode) {
-  await ctx.answerCbQuery('⏳ Raqam olinmoqda...');
+  await ctx.answerCbQuery('⏳ Получаем номер...');
 
   const svc = findService(serviceCode);
   const cnt = findCountry(countryCode) || { code: countryCode, name: countryName(countryCode) };
   const user = await User.findOne({ telegramId: ctx.from.id });
 
-  // Tasdiqlash bosilgunga qadar narx/mavjudlik oʻzgargan boʻlishi mumkin — qayta tekshiramiz
   const { cost, count, ok } = await getNumberPrice(process.env.HEROSMS_API_KEY, serviceCode, countryCode);
 
   if (!ok) {
-    return safeEdit(ctx, 
-      `⚠️ Narxni tasdiqlab boʻlmadi. Birozdan keyin qaytadan urinib koʻring.`,
+    return safeEdit(ctx,
+      `⚠️ Не удалось проверить цену. Попробуйте позже.`,
       { parse_mode: 'HTML', ...backToMain() }
     );
   }
   if (count <= 0 || !(cost > 0)) {
-    return safeEdit(ctx, 
-      `📭 Afsuski, bu oraliqda raqamlar tugab qoldi. Boshqa mamlakatni tanlang.`,
+    return safeEdit(ctx,
+      `📭 Номера закончились за это время. Выберите другую страну.`,
       { parse_mode: 'HTML', ...countriesKeyboard(serviceCode) }
     );
   }
@@ -278,24 +261,22 @@ async function handleConfirm(ctx, serviceCode, countryCode) {
   const priceUZS = await calcPrice(cost);
 
   if ((user?.balance || 0) < priceUZS) {
-    return safeEdit(ctx, '❌ Balans yetarli emas!', { parse_mode: 'HTML', ...backToMain() });
+    return safeEdit(ctx, '❌ Недостаточно средств!', { parse_mode: 'HTML', ...backToMain() });
   }
 
   let numData;
   try {
     numData = await getNumber(process.env.HEROSMS_API_KEY, serviceCode, countryCode);
   } catch (e) {
-    const errText = ERROR_MAP[e.message] || ('❌ Xato: ' + e.message);
+    const errText = ERROR_MAP[e.message] || ('❌ Ошибка: ' + e.message);
     return safeEdit(ctx, errText, backToMain());
   }
 
-  // Balansdan ayirish
   await User.updateOne(
     { telegramId: ctx.from.id },
     { $inc: { balance: -priceUZS, totalSpent: priceUZS } }
   );
 
-  // Aktivatsiyani saqlash
   await Activation.create({
     telegramId: ctx.from.id,
     activationId: numData.activationId,
@@ -306,20 +287,18 @@ async function handleConfirm(ctx, serviceCode, countryCode) {
     status: 'pending',
   });
 
-  await safeEdit(ctx, 
-    `✅ <b>Raqam tayyor!</b>\n${DIVIDER}\n` +
-    `📱 Raqam: <code>+${numData.phoneNumber}</code>\n` +
-    `🔧 Servis: <b>${svc.name}</b>\n` +
-    `🌍 Mamlakat: <b>${cnt.name}</b>\n` +
-    `💰 To'landi: <b>${priceUZS.toLocaleString()} so'm</b>\n${DIVIDER}\n` +
-    `⏳ SMS kutilmoqda (${Math.round(MAX_WAIT / 60000)} daqiqagacha)...`,
+  await safeEdit(ctx,
+    `✅ <b>Номер получен!</b>\n${DIVIDER}\n` +
+    `📱 Номер: <code>+${numData.phoneNumber}</code>\n` +
+    `🔧 Сервис: <b>${svc.name}</b>\n` +
+    `🌍 Страна: <b>${cnt.name}</b>\n` +
+    `💰 Оплачено: <b>${priceUZS.toLocaleString()} сум</b>\n${DIVIDER}\n` +
+    `⏳ Ожидаем SMS (до ${Math.round(MAX_WAIT / 60000)} минут)...`,
     { parse_mode: 'HTML', ...cancelActivationKeyboard(numData.activationId) }
   );
 
-  // Isbot kanaliga post (sozlangan bo'lsa)
   postProofToChannel(ctx, { countryName: cnt.name, phoneNumber: numData.phoneNumber });
 
-  // Polling boshlash
   pollForCode(ctx, numData.activationId, ctx.from.id);
 }
 
@@ -338,11 +317,11 @@ function pollForCode(ctx, activationId, telegramId) {
 
       if (typeof status === 'string' && status.startsWith('STATUS_OK:')) {
         const code = status.split(':')[1];
-        await setStatus(process.env.HEROSMS_API_KEY, activationId, 6); // complete
+        await setStatus(process.env.HEROSMS_API_KEY, activationId, 6);
         await Activation.updateOne({ activationId }, { status: 'success', code });
         await ctx.telegram.sendMessage(
           telegramId,
-          `📩 <b>SMS kodi keldi!</b>\n\n🔑 Kod: <code>${code}</code>\n\n✅ Aktivatsiya muvaffaqiyatli yakunlandi.`,
+          `📩 <b>SMS-код получен!</b>\n\n🔑 Код: <code>${code}</code>\n\n✅ Активация успешно завершена.`,
           { parse_mode: 'HTML', ...backToMain() }
         );
         delete activePolls[telegramId];
@@ -351,12 +330,11 @@ function pollForCode(ctx, activationId, telegramId) {
 
       if (status === 'STATUS_CANCEL') {
         await Activation.updateOne({ activationId }, { status: 'cancelled' });
-        await ctx.telegram.sendMessage(telegramId, '🚫 Aktivatsiya bekor qilindi.', backToMain());
+        await ctx.telegram.sendMessage(telegramId, '🚫 Активация отменена.', backToMain());
         delete activePolls[telegramId];
         return;
       }
 
-      // STATUS_WAIT_CODE — davom etamiz
       activePolls[telegramId] = setTimeout(check, 5000);
     } catch {
       activePolls[telegramId] = setTimeout(check, 5000);
@@ -366,18 +344,15 @@ function pollForCode(ctx, activationId, telegramId) {
   activePolls[telegramId] = setTimeout(check, 3000);
 }
 
-// Pending aktivatsiyani atomik ravishda "timeout" ga o'tkazadi va pulni qaytaradi.
-// findOneAndUpdate faqat hali "pending" bo'lgan hujjatni topsa ishlaydi — shu tufayli
-// pollForCode va watchdog bir xil aktivatsiyani ikki marta qaytarib yubormaydi.
 async function refundIfExpired(activationId, telegramId, telegram) {
   const activation = await Activation.findOneAndUpdate(
     { activationId, status: 'pending' },
     { status: 'timeout' }
   );
-  if (!activation) return; // allaqachon yakunlangan/bekor qilingan/qaytarilgan
+  if (!activation) return;
 
   try {
-    await setStatus(process.env.HEROSMS_API_KEY, activationId, 8); // HeroSMS'da ham bekor qilamiz
+    await setStatus(process.env.HEROSMS_API_KEY, activationId, 8);
   } catch {}
 
   await User.updateOne(
@@ -388,18 +363,15 @@ async function refundIfExpired(activationId, telegramId, telegram) {
   try {
     await telegram.sendMessage(
       telegramId,
-      `⏰ <b>Vaqt tugadi (${Math.round(MAX_WAIT / 60000)} daqiqa)</b>\n${DIVIDER}\n` +
-      `📵 Nomerga SMS kelmadi.\n` +
-      `💰 To'langan <b>${activation.pricePaid.toLocaleString()} so'm</b> hisobingizga qaytarildi.`,
+      `⏰ <b>Время истекло (${Math.round(MAX_WAIT / 60000)} мин.)</b>\n${DIVIDER}\n` +
+      `📵 SMS на номер не пришла.\n` +
+      `💰 <b>${activation.pricePaid.toLocaleString()} сум</b> возвращено на ваш баланс.`,
       { parse_mode: 'HTML', ...backToMain() }
     );
   } catch {}
 }
 
-// Bot qayta ishga tushganda ham (Render uxlab qolishi / qayta deploy bo'lishi) hech qanday
-// pending aktivatsiya "osilib qolmasligi" uchun DB'ni davriy tekshirib turadigan qo'riqchi.
-// Bu setTimeout'larga bog'liq bo'lmagani uchun process qayta boshlansa ham ishlayveradi.
-const WATCHDOG_INTERVAL = 20 * 1000; // 20 soniyada bir tekshiradi
+const WATCHDOG_INTERVAL = 20 * 1000;
 
 function startExpiryWatchdog(bot) {
   setInterval(async () => {
@@ -410,7 +382,7 @@ function startExpiryWatchdog(bot) {
         await refundIfExpired(act.activationId, act.telegramId, bot.telegram);
       }
     } catch (e) {
-      console.error('Watchdog xatosi:', e.message);
+      console.error('Ошибка сторожевого таймера:', e.message);
     }
   }, WATCHDOG_INTERVAL);
 }
@@ -418,9 +390,7 @@ function startExpiryWatchdog(bot) {
 async function handleCancelActivation(ctx, activationId) {
   await ctx.answerCbQuery();
   try {
-    await setStatus(process.env.HEROSMS_API_KEY, activationId, 8); // cancel
-    // Atomik: faqat hali "pending" bo'lsa "cancelled" ga o'tkazamiz va pulni qaytaramiz —
-    // shu tufayli watchdog/poll bilan bir vaqtga to'g'ri kelib ikki marta qaytarib yuborilmaydi.
+    await setStatus(process.env.HEROSMS_API_KEY, activationId, 8);
     const activation = await Activation.findOneAndUpdate(
       { activationId, status: 'pending' },
       { status: 'cancelled' }
@@ -430,19 +400,19 @@ async function handleCancelActivation(ctx, activationId) {
       delete activePolls[ctx.from.id];
     }
 
-    let text = '🚫 Aktivatsiya bekor qilindi.';
+    let text = '🚫 Активация отменена.';
     if (activation) {
       await User.updateOne(
         { telegramId: ctx.from.id },
         { $inc: { balance: activation.pricePaid, totalSpent: -activation.pricePaid } }
       );
-      text = `🚫 <b>Aktivatsiya bekor qilindi</b>\n${DIVIDER}\n` +
-        `💰 To'langan <b>${activation.pricePaid.toLocaleString()} so'm</b> hisobingizga qaytarildi.`;
+      text = `🚫 <b>Активация отменена</b>\n${DIVIDER}\n` +
+        `💰 <b>${activation.pricePaid.toLocaleString()} сум</b> возвращено на ваш баланс.`;
     }
 
     await safeEdit(ctx, text, { parse_mode: 'HTML', ...backToMain() });
   } catch (e) {
-    await safeEdit(ctx, '❌ Bekor qilishda xato: ' + e.message, backToMain());
+    await safeEdit(ctx, '❌ Ошибка при отмене: ' + e.message, backToMain());
   }
 }
 
