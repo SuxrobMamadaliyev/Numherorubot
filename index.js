@@ -22,22 +22,20 @@ const {
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// ---- MongoDB ulanish ----
+// ---- MongoDB подключение ----
 mongoose
   .connect(process.env.MONGODB_URI)
-  .then(() => console.log('✅ MongoDB ulandi'))
-  .catch(err => console.error('❌ MongoDB xatosi:', err));
+  .then(() => console.log('✅ MongoDB подключён'))
+  .catch(err => console.error('❌ Ошибка MongoDB:', err));
 
-// Bot qayta ishga tushsa ham (Render uxlab qolishi / qayta deploy) pending aktivatsiyalarni
-// vaqti o'tgach avtomatik bekor qilib, pulni qaytarib turadi.
 startExpiryWatchdog(bot);
 
-// ---- Scenes ----
+// ---- Сцены ----
 const stage = new Scenes.Stage([adminScene(), topupScene()]);
 bot.use(session());
 bot.use(stage.middleware());
 
-// ---- Foydalanuvchini bazaga yozish ----
+// ---- Сохранение пользователя в базу ----
 bot.use(async (ctx, next) => {
   if (ctx.from) {
     await User.findOneAndUpdate(
@@ -55,14 +53,14 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
-// ---- Majburiy kanal obunasi tekshiruvi ----
+// ---- Проверка обязательной подписки на канал ----
 bot.use(requireChannelSub);
 
 // ================= START =================
 bot.start(async ctx => {
   const admin = isAdmin(ctx.from.id);
 
-  // Referal
+  // Реферал
   const payload = ctx.startPayload;
   if (payload && /^\d+$/.test(payload) && parseInt(payload) !== ctx.from.id) {
     const existing = await User.findOne({ telegramId: ctx.from.id });
@@ -77,7 +75,7 @@ bot.start(async ctx => {
       try {
         await ctx.telegram.sendMessage(
           payload,
-          `🎉 Sizning referalingiz orqali yangi foydalanuvchi qo'shildi!\n💰 +${bonus.toLocaleString()} so'm balansga qo'shildi.`
+          `🎉 По вашей реферальной ссылке зарегистрировался новый пользователь!\n💰 +${bonus.toLocaleString()} сум зачислено на баланс.`
         );
       } catch {}
     }
@@ -88,34 +86,34 @@ bot.start(async ctx => {
 
   await sendMainMenu(
     ctx,
-    `👋 Assalomu alaykum, ${ctx.from.first_name}!\n\n` +
-    `📱 Bu bot orqali turli xizmatlar uchun virtual raqamlar sotib olishingiz mumkin.\n\n` +
-    `👛 Balansingiz: <b>${balance.toLocaleString()} so'm</b>\n\n` +
-    `🔥 Eng arzon takliflarni koʻrish uchun pastdagi tugmani bosing.`,
+    `👋 Привет, ${ctx.from.first_name}!\n\n` +
+    `📱 Через этого бота вы можете купить виртуальные номера для различных сервисов.\n\n` +
+    `👛 Ваш баланс: <b>${balance.toLocaleString()} сум</b>\n\n` +
+    `🔥 Нажмите кнопку ниже, чтобы увидеть самые выгодные предложения.`,
     mainMenu(admin),
     { edit: false }
   );
 });
 
-// ================= KANAL OBUNASINI TEKSHIRISH =================
+// ================= ПРОВЕРКА ПОДПИСКИ НА КАНАЛ =================
 bot.action('check_sub', async ctx => {
   const admin = isAdmin(ctx.from.id);
-  await ctx.answerCbQuery('✅ Tekshirildi!');
+  await ctx.answerCbQuery('✅ Проверено!');
   await sendMainMenu(
     ctx,
-    `👋 Xush kelibsiz, ${ctx.from.first_name}!\n\nQuyidagi menyudan foydalaning:`,
+    `👋 Добро пожаловать, ${ctx.from.first_name}!\n\nВыберите нужный пункт меню:`,
     mainMenu(admin),
     { edit: true }
   );
 });
 
-// ================= MAIN MENU =================
+// ================= ГЛАВНОЕ МЕНЮ =================
 bot.action('back_main', async ctx => {
   await ctx.answerCbQuery();
   const admin = isAdmin(ctx.from.id);
   const userDoc = await User.findOne({ telegramId: ctx.from.id });
   const balance = userDoc?.balance || 0;
-  const text = `🏠 <b>Bosh menyu</b>\n\n👛 Balansingiz: <b>${balance.toLocaleString()} so'm</b>`;
+  const text = `🏠 <b>Главное меню</b>\n\n👛 Ваш баланс: <b>${balance.toLocaleString()} сум</b>`;
   await sendMainMenu(ctx, text, mainMenu(admin), { edit: true });
 });
 
@@ -123,43 +121,43 @@ bot.action('help', async ctx => {
   await ctx.answerCbQuery();
   const { getSetting } = require('./settings');
   const support = await getSetting('support_username');
-  await safeEdit(ctx, 
-    `❓ <b>Yordam</b>\n\n` +
-    `🔥 "Arzon nomerlar" — barcha xizmatlar boʻyicha eng arzon takliflar roʻyxati\n` +
-    `📱 "Raqam olish" — servis va mamlakatni tanlab virtual raqam sotib olish\n` +
-    `👤 "Kabinet" — balans va xaridlar tarixi\n` +
-    `👛 "Balans to'ldirish" — Telegram Stars yoki karta orqali to'lov\n\n` +
-    `💡 Servis tanlaganingizdan keyin "Eng arzonini avtomatik tanlash" tugmasi eng arzon mamlakatni oʻzi topib beradi.\n\n` +
-    `💬 Savollar bo'yicha: ${support}`,
+  await safeEdit(ctx,
+    `❓ <b>Помощь</b>\n\n` +
+    `🔥 «Дешёвые номера» — список самых выгодных предложений по всем сервисам\n` +
+    `📱 «Купить номер» — выберите сервис и страну, чтобы купить виртуальный номер\n` +
+    `👤 «Кабинет» — баланс и история покупок\n` +
+    `👛 «Пополнить баланс» — оплата через Telegram Stars, карту или Visa\n\n` +
+    `💡 После выбора сервиса кнопка «🔥 Выбрать самый дешёвый автоматически» найдёт самую выгодную страну.\n\n` +
+    `💬 По вопросам: ${support}`,
     { parse_mode: 'HTML', ...backToMain() }
   );
 });
 
-// ================= CABINET =================
+// ================= КАБИНЕТ =================
 bot.action('cabinet', async ctx => {
   await ctx.answerCbQuery();
   const user = await User.findOne({ telegramId: ctx.from.id });
   const activations = await Activation.find({ telegramId: ctx.from.id }).sort({ createdAt: -1 }).limit(5);
 
   let histText = activations.length
-    ? activations.map(a => `• ${a.service} (${a.status === 'success' ? '✅' : a.status === 'pending' ? '⏳' : '❌'}) — ${a.pricePaid.toLocaleString()} so'm`).join('\n')
-    : 'Tarix mavjud emas.';
+    ? activations.map(a => `• ${a.service} (${a.status === 'success' ? '✅' : a.status === 'pending' ? '⏳' : '❌'}) — ${a.pricePaid.toLocaleString()} сум`).join('\n')
+    : 'История пуста.';
 
   const refLink = `https://t.me/${ctx.botInfo.username}?start=${ctx.from.id}`;
 
-  await safeEdit(ctx, 
-    `👤 <b>Kabinet</b>\n\n` +
+  await safeEdit(ctx,
+    `👤 <b>Кабинет</b>\n\n` +
     `🆔 ID: <code>${ctx.from.id}</code>\n` +
-    `👛 Balans: <b>${(user?.balance || 0).toLocaleString()} so'm</b>\n` +
-    `💸 Jami sarflangan: <b>${(user?.totalSpent || 0).toLocaleString()} so'm</b>\n` +
-    `👥 Referallar: <b>${user?.referralCount || 0}</b>\n\n` +
-    `📜 <b>Oxirgi xaridlar:</b>\n${histText}\n\n` +
-    `🔗 Referal havola:\n<code>${refLink}</code>`,
+    `👛 Баланс: <b>${(user?.balance || 0).toLocaleString()} сум</b>\n` +
+    `💸 Всего потрачено: <b>${(user?.totalSpent || 0).toLocaleString()} сум</b>\n` +
+    `👥 Рефералов: <b>${user?.referralCount || 0}</b>\n\n` +
+    `📜 <b>Последние покупки:</b>\n${histText}\n\n` +
+    `🔗 Реферальная ссылка:\n<code>${refLink}</code>`,
     { parse_mode: 'HTML', ...backToMain() }
   );
 });
 
-// ================= BUY NUMBER =================
+// ================= КУПИТЬ НОМЕР =================
 bot.action('buy_number', async ctx => {
   await ctx.answerCbQuery();
   await showServices(ctx);
@@ -189,22 +187,22 @@ bot.action(/^cancel_act_(.+)$/, async ctx => {
   await handleCancelActivation(ctx, ctx.match[1]);
 });
 
-// ================= BALANS TO'LDIRISH (entry point) =================
+// ================= ПОПОЛНЕНИЕ БАЛАНСА =================
 bot.action('topup', async ctx => {
   await ctx.answerCbQuery();
   await ctx.scene.enter('topup_flow');
 });
 
-// ================= ADMIN PANEL (entry point) =================
+// ================= АДМИН ПАНЕЛЬ =================
 bot.action('admin_panel', adminOnly, async ctx => {
   await ctx.answerCbQuery();
   await ctx.scene.enter('admin');
 });
 
-// ================= ADMIN: balans to'ldirish tasdiqlash / rad etish =================
+// ================= ADMIN: подтверждение / отклонение пополнения =================
 bot.action(/^approve_topup_(\d+)_(\d+)_(\d+)$/, async ctx => {
-  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('⛔ Ruxsat yoq', { show_alert: true });
-  await ctx.answerCbQuery('✅ Tasdiqlandi');
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('⛔ Нет доступа', { show_alert: true });
+  await ctx.answerCbQuery('✅ Подтверждено');
   const targetUserId = parseInt(ctx.match[1]);
   const credited = parseInt(ctx.match[2]);
   const fee = parseInt(ctx.match[3]);
@@ -212,14 +210,14 @@ bot.action(/^approve_topup_(\d+)_(\d+)_(\d+)$/, async ctx => {
     const updated = await approveTopup(ctx, targetUserId, credited, fee);
     await ctx.editMessageCaption(
       ctx.callbackQuery.message.caption +
-        `\n\n✅ <b>TASDIQLANDI</b> (yangi balans: ${updated.balance.toLocaleString()} so'm)`,
+        `\n\n✅ <b>ПОДТВЕРЖДЕНО</b> (новый баланс: ${updated.balance.toLocaleString()} сум)`,
       { parse_mode: 'HTML' }
     );
   } catch (e) {
-    console.error('Topupni tasdiqlashda xato:', e);
+    console.error('Ошибка подтверждения пополнения:', e);
     try {
       await ctx.editMessageCaption(
-        ctx.callbackQuery.message.caption + `\n\n❌ <b>XATO:</b> ${e.message}`,
+        ctx.callbackQuery.message.caption + `\n\n❌ <b>ОШИБКА:</b> ${e.message}`,
         { parse_mode: 'HTML' }
       );
     } catch {}
@@ -227,50 +225,49 @@ bot.action(/^approve_topup_(\d+)_(\d+)_(\d+)$/, async ctx => {
 });
 
 bot.action(/^reject_topup_(\d+)$/, async ctx => {
-  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('⛔ Ruxsat yoq', { show_alert: true });
-  await ctx.answerCbQuery('❌ Rad etildi');
+  if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('⛔ Нет доступа', { show_alert: true });
+  await ctx.answerCbQuery('❌ Отклонено');
   const targetUserId = parseInt(ctx.match[1]);
   try {
-    await ctx.telegram.sendMessage(targetUserId, "❌ To'lov chekingiz rad etildi. Iltimos, admin bilan bog'laning yoki qaytadan urinib ko'ring.", backToMain());
+    await ctx.telegram.sendMessage(targetUserId, "❌ Ваш чек об оплате отклонён. Пожалуйста, свяжитесь с администратором или попробуйте ещё раз.", backToMain());
   } catch {}
   try {
     await ctx.editMessageCaption(
-      ctx.callbackQuery.message.caption + '\n\n❌ <b>RAD ETILDI</b>',
+      ctx.callbackQuery.message.caption + '\n\n❌ <b>ОТКЛОНЕНО</b>',
       { parse_mode: 'HTML' }
     );
   } catch {}
 });
 
-// ================= ADMIN: balans qo'shish komandasi =================
-// /addbalance <telegram_id> <miqdor>
+// ================= ADMIN: добавление баланса командой =================
+// /addbalance <telegram_id> <сумма>
 bot.command('addbalance', async ctx => {
   if (!isAdmin(ctx.from.id)) return;
   const parts = ctx.message.text.split(' ').filter(Boolean);
   if (parts.length !== 3) {
-    return ctx.reply('Format: /addbalance <telegram_id> <miqdor>\nMasalan: /addbalance 123456789 50000');
+    return ctx.reply('Формат: /addbalance <telegram_id> <сумма>\nПример: /addbalance 123456789 50000');
   }
   const [, targetId, amountStr] = parts;
   const amount = parseFloat(amountStr);
-  if (isNaN(amount)) return ctx.reply("❌ Miqdor noto'g'ri.");
+  if (isNaN(amount)) return ctx.reply('❌ Неверная сумма.');
 
   await User.findOneAndUpdate(
     { telegramId: parseInt(targetId) },
     { $inc: { balance: amount } },
     { upsert: true }
   );
-  await ctx.reply(`✅ ${targetId} ga ${amount.toLocaleString()} so'm qo'shildi.`);
+  await ctx.reply(`✅ Пользователю ${targetId} начислено ${amount.toLocaleString()} сум.`);
   try {
-    await ctx.telegram.sendMessage(targetId, `💰 Balansingizga ${amount.toLocaleString()} so'm qo'shildi!`);
+    await ctx.telegram.sendMessage(targetId, `💰 На ваш баланс зачислено ${amount.toLocaleString()} сум!`);
   } catch {}
 });
 
-// ================= TELEGRAM STARS TO'LOVI =================
+// ================= ОПЛАТА ЧЕРЕЗ TELEGRAM STARS =================
 bot.on('pre_checkout_query', async ctx => {
-  // Hozircha barcha so'rovlarni tasdiqlaymiz (zaxira/limit tekshiruvi shart emas)
   try {
     await ctx.answerPreCheckoutQuery(true);
   } catch (e) {
-    console.error('PreCheckout xatosi:', e.message);
+    console.error('Ошибка pre_checkout:', e.message);
   }
 });
 
@@ -279,80 +276,72 @@ bot.on('successful_payment', async ctx => {
   if (payment.currency !== 'XTR') return;
 
   const starsCount = payment.total_amount;
-  // payload formati: topup_<telegramId>_<amountUZS>_<timestamp>
   const parts = (payment.invoice_payload || '').split('_');
   const amountUZS = parseInt(parts[2]) || 0;
 
   if (amountUZS > 0) {
     await creditStarsPayment(ctx, ctx.from.id, amountUZS, starsCount);
   } else {
-    await ctx.reply('✅ To\'lov qabul qilindi, lekin summani aniqlashda xato. Admin bilan bog\'laning.');
+    await ctx.reply('✅ Платёж получен, но не удалось определить сумму. Обратитесь к администратору.');
   }
 });
 
-// ================= ERROR HANDLING =================
+// ================= ОБРАБОТКА ОШИБОК =================
 bot.catch((err, ctx) => {
-  console.error('Bot xatosi:', err);
+  console.error('Ошибка бота:', err);
   try {
-    ctx.reply("❌ Texnik xatolik yuz berdi. Iltimos, keyinroq urinib ko'ring.");
+    ctx.reply('❌ Произошла техническая ошибка. Пожалуйста, попробуйте позже.');
   } catch {}
 });
 
-// ================= LAUNCH (WEBHOOK + HEALTH CHECK) =================
+// ================= ЗАПУСК (WEBHOOK + HEALTH CHECK) =================
 const express = require('express');
 const PORT = process.env.PORT || 3000;
-// RENDER_EXTERNAL_URL Render tomonidan avtomatik beriladi (masalan: https://my-bot.onrender.com)
-// Agar boshqa hostingda bo'lsa, WEBHOOK_URL ni .env orqali qo'lda bering.
 const DOMAIN = process.env.WEBHOOK_URL || process.env.RENDER_EXTERNAL_URL;
 const WEBHOOK_PATH = `/webhook/${process.env.BOT_TOKEN}`;
 
 if (!DOMAIN) {
-  console.error('❌ WEBHOOK_URL yoki RENDER_EXTERNAL_URL topilmadi. .env ga WEBHOOK_URL qo\'shing (masalan: https://your-app.onrender.com)');
+  console.error('❌ WEBHOOK_URL или RENDER_EXTERNAL_URL не найден. Добавьте WEBHOOK_URL в .env');
   process.exit(1);
 }
 
 const app = express();
 app.use(express.json());
 
-// UptimeRobot yoki boshqa monitoring xizmati uchun "tirikligini" tekshirish yo'li.
-// Bu yo'lga har necha daqiqada so'rov yuborilsa, Render bepul instansiyasi uxlab qolmaydi.
 app.get('/ping', (req, res) => res.status(200).send('OK'));
-app.get('/', (req, res) => res.status(200).send('Bot ishlayapti'));
+app.get('/', (req, res) => res.status(200).send('Бот работает'));
 
 app.use(bot.webhookCallback(WEBHOOK_PATH));
 
 async function setWebhookWithRetry(retries = 8, delaySeconds = 3) {
   try {
     await bot.telegram.setWebhook(`${DOMAIN}${WEBHOOK_PATH}`);
-    console.log(`✅ Webhook o'rnatildi: ${DOMAIN}${WEBHOOK_PATH}`);
+    console.log(`✅ Webhook установлен: ${DOMAIN}${WEBHOOK_PATH}`);
   } catch (err) {
     const retryAfter = err?.response?.parameters?.retry_after || delaySeconds;
-    console.error(`❌ Webhook o'rnatishda xato: ${err.message}`);
+    console.error(`❌ Ошибка установки webhook: ${err.message}`);
     if (retries > 0) {
-      console.warn(`⏳ ${retryAfter}s kutib qayta urinish... (qolgan urinishlar: ${retries})`);
+      console.warn(`⏳ Повтор через ${retryAfter}с... (осталось попыток: ${retries})`);
       await new Promise(r => setTimeout(r, retryAfter * 1000));
       return setWebhookWithRetry(retries - 1, Math.min(delaySeconds * 2, 30));
     }
-    // Urinishlar tugadi — lekin serverni o'chirmaymiz, chunki HTTP server
-    // (/ping, /) ishlab turishi kerak; Render health-check shu orqali o'tadi.
-    // Webhook keyinroq /set-webhook orqali qo'lda o'rnatilishi mumkin.
-    console.error('❌ Webhook barcha urinishlardan keyin ham o\'rnatilmadi. Server ishlashda davom etadi.');
+    console.error('❌ Webhook не установлен после всех попыток. Сервер продолжает работу.');
   }
 }
 
 app.get('/set-webhook', async (req, res) => {
   try {
     await bot.telegram.setWebhook(`${DOMAIN}${WEBHOOK_PATH}`);
-    res.status(200).send('✅ Webhook qayta o\'rnatildi');
+    res.status(200).send('✅ Webhook переустановлен');
   } catch (err) {
-    res.status(500).send('❌ Xato: ' + err.message);
+    res.status(500).send('❌ Ошибка: ' + err.message);
   }
 });
 
 app.listen(PORT, async () => {
-  console.log(`🌐 Server ${PORT}-portda ishga tushdi`);
-  setWebhookWithRetry(); // await qilinmaydi — server darhol ishga tushadi, webhook fonda o'rnatiladi
-  console.log('🤖 Bot ishga tushdi (webhook)');
+  console.log(`🌐 Сервер запущен на порту ${PORT}`);
+  setWebhookWithRetry();
+  console.log('🤖 Бот запущен (webhook)');
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
