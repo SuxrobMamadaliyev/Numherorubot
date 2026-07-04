@@ -2,13 +2,13 @@ const { Markup } = require('telegraf');
 const { getSetting } = require('./settings');
 const { isAdmin } = require('./admin');
 
-// Botdan foydalanishdan oldin barcha majburiy kanallarga obuna bo'lishni tekshiradi.
-// Admin panelda cheksiz miqdorda kanal qo'shish mumkin.
+// Проверяет подписку на все обязательные каналы перед использованием бота.
+// В админ панели можно добавить неограниченное количество каналов.
 async function requireChannelSub(ctx, next) {
   if (isAdmin(ctx.from?.id)) return next();
 
   const channels = (await getSetting('force_sub_channels')) || [];
-  if (!channels.length) return next(); // Majburiy obuna o'chirilgan / kanal qo'shilmagan
+  if (!channels.length) return next();
 
   const notJoined = [];
   for (const channel of channels) {
@@ -17,10 +17,7 @@ async function requireChannelSub(ctx, next) {
       const isMember = ['member', 'administrator', 'creator'].includes(member.status);
       if (!isMember) notJoined.push(channel);
     } catch (e) {
-      // Tekshira olmadik (masalan, bot bu kanalda admin emas yoki manzil noto'g'ri).
-      // Xavfsizlik uchun bunday holatda ham foydalanuvchini "aʼzo bo'lmagan" deb hisoblaymiz,
-      // aks holda bu kanal doim o'tkazib yuborilib qoladi.
-      console.error(`Kanal tekshiruvida xato (${channel}):`, e.message);
+      console.error(`Ошибка проверки канала (${channel}):`, e.message);
       notJoined.push(channel);
     }
   }
@@ -31,21 +28,21 @@ async function requireChannelSub(ctx, next) {
     const link = channel.startsWith('@') ? `https://t.me/${channel.slice(1)}` : channel;
     return [Markup.button.url(`📢 ${channel}`, link)];
   });
-  buttons.push([Markup.button.callback('✅ Tekshirish', 'check_sub')]);
+  buttons.push([Markup.button.callback('✅ Проверить подписку', 'check_sub')]);
 
   const text =
-    `🔒 Botdan foydalanish uchun quyidagi kanal(lar)ga aʼzo boʻling:\n\n` +
+    `🔒 Для использования бота подпишитесь на следующие каналы:\n\n` +
     notJoined.map(c => `📢 ${c}`).join('\n') +
-    `\n\nAʼzo boʻlgach, "✅ Tekshirish" tugmasini bosing.`;
+    `\n\nПосле подписки нажмите «✅ Проверить подписку».`;
   const kb = Markup.inlineKeyboard(buttons);
 
   if (ctx.callbackQuery) {
-    await ctx.answerCbQuery('🔒 Avval barcha kanallarga aʼzo boʻling!', { show_alert: true });
+    await ctx.answerCbQuery('🔒 Сначала подпишитесь на все каналы!', { show_alert: true });
     try { await ctx.editMessageText(text, kb); } catch { await ctx.reply(text, kb); }
   } else {
     await ctx.reply(text, kb);
   }
-  return; // next() chaqirilmaydi — zanjir to'xtaydi
+  return;
 }
 
 module.exports = { requireChannelSub };
