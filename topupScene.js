@@ -4,23 +4,24 @@ const { getAllSettings } = require('./settings');
 const { backToMain, safeEdit } = require('./keyboards');
 const { ADMIN_IDS } = require('./admin');
 
-// Waiting state: telegramId -> { step, method, amount, fee, credited }
+// Состояние ожидания: telegramId -> { step, method, amount, fee, credited }
 const waiting = {};
 
 function methodKeyboard() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('⭐ Telegram Stars (avtomatik)', 'topup_method_stars')],
-    [Markup.button.callback('💳 Karta orqali (chek bilan)', 'topup_method_card')],
-    [Markup.button.callback('❌ Bekor', 'back_main')],
+    [Markup.button.callback('⭐ Telegram Stars (автоматически)', 'topup_method_stars')],
+    [Markup.button.callback('💳 Банковская карта (с чеком)', 'topup_method_card')],
+    [Markup.button.callback('💳 Visa / международная карта', 'topup_method_visa')],
+    [Markup.button.callback('❌ Отмена', 'back_main')],
   ]);
 }
 
 async function showTopupMenu(ctx) {
   const user = await User.findOne({ telegramId: ctx.from.id });
   const text =
-    `👛 <b>Balans to'ldirish</b>\n\n` +
-    `💰 Joriy balans: <b>${(user?.balance || 0).toLocaleString()} so'm</b>\n\n` +
-    `To'ldirish usulini tanlang:`;
+    `👛 <b>Пополнение баланса</b>\n\n` +
+    `💰 Текущий баланс: <b>${(user?.balance || 0).toLocaleString()} сум</b>\n\n` +
+    `Выберите способ пополнения:`;
 
   waiting[ctx.from.id] = { step: 'choose_method' };
 
@@ -55,11 +56,11 @@ function topupScene() {
       await ctx.answerCbQuery();
       waiting[ctx.from.id] = { step: 'amount', method: 'card' };
       const s = await getAllSettings();
-      return safeEdit(ctx, 
-        `💳 <b>Karta orqali to'ldirish</b>\n\n` +
-        `ℹ️ To'ldirishda <b>${s.topup_fee_percent}%</b> xizmat haqi ushlab qolinadi.\n\n` +
-        `To'ldirish uchun summani kiriting (so'mda), masalan: <code>50000</code>`,
-        { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ Bekor', 'topup')]]) }
+      return safeEdit(ctx,
+        `💳 <b>Пополнение через банковскую карту</b>\n\n` +
+        `ℹ️ Комиссия за пополнение: <b>${s.topup_fee_percent}%</b>\n\n` +
+        `Введите сумму пополнения в сумах, например: <code>50000</code>`,
+        { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'topup')]]) }
       );
     }
 
@@ -67,12 +68,26 @@ function topupScene() {
       await ctx.answerCbQuery();
       waiting[ctx.from.id] = { step: 'amount', method: 'stars' };
       const s = await getAllSettings();
-      return safeEdit(ctx, 
-        `⭐ <b>Telegram Stars orqali to'ldirish</b>\n\n` +
-        `ℹ️ Kurs: 1 ⭐ = ${s.star_to_uzs.toLocaleString()} so'm\n` +
-        `✅ Bu usulda komissiya olinmaydi, balans darhol avtomatik to'ldiriladi.\n\n` +
-        `To'ldirish uchun summani kiriting (so'mda), masalan: <code>50000</code>`,
-        { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ Bekor', 'topup')]]) }
+      return safeEdit(ctx,
+        `⭐ <b>Пополнение через Telegram Stars</b>\n\n` +
+        `ℹ️ Курс: 1 ⭐ = ${s.star_to_uzs.toLocaleString()} сум\n` +
+        `✅ Без комиссии, баланс зачисляется автоматически.\n\n` +
+        `Введите сумму пополнения в сумах, например: <code>50000</code>`,
+        { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'topup')]]) }
+      );
+    }
+
+    if (data === 'topup_method_visa') {
+      await ctx.answerCbQuery();
+      waiting[ctx.from.id] = { step: 'amount', method: 'visa' };
+      const s = await getAllSettings();
+      const visaDetails = s.visa_details || 'Реквизиты не настроены. Обратитесь к администратору.';
+      const visaHolder = s.visa_holder || '';
+      return safeEdit(ctx,
+        `💳 <b>Пополнение через Visa / международную карту</b>\n\n` +
+        `ℹ️ Комиссия за пополнение: <b>${s.topup_fee_percent}%</b>\n\n` +
+        `Введите сумму пополнения в сумах, например: <code>50000</code>`,
+        { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'topup')]]) }
       );
     }
 
@@ -90,50 +105,65 @@ function topupScene() {
 
     const amount = parseInt(ctx.message.text.replace(/\D/g, ''));
     if (!amount || amount < 1000) {
-      return ctx.reply("❌ Iltimos, to'g'ri summa kiriting (kamida 1000 so'm).");
+      return ctx.reply('❌ Пожалуйста, введите корректную сумму (минимум 1000 сум).');
     }
 
     const s = await getAllSettings();
 
     if (w.method === 'stars') {
-      // Stars orqali to'lov — narxni Stars'ga aylantiramiz
       const starsAmount = Math.ceil(amount / s.star_to_uzs);
       delete waiting[ctx.from.id];
 
       try {
         await ctx.replyWithInvoice({
-          title: "Balansni to'ldirish",
-          description: `Botdagi balansingizga ${amount.toLocaleString()} so'm qo'shiladi.`,
+          title: 'Пополнение баланса',
+          description: `На ваш баланс будет зачислено ${amount.toLocaleString()} сум.`,
           payload: `topup_${ctx.from.id}_${amount}_${Date.now()}`,
-          provider_token: '', // Stars uchun bo'sh
+          provider_token: '',
           currency: 'XTR',
-          prices: [{ label: 'Balans to\'ldirish', amount: starsAmount }],
+          prices: [{ label: 'Пополнение баланса', amount: starsAmount }],
         });
         await ctx.reply(
-          `⭐ Hisob-faktura yuborildi: <b>${starsAmount} Stars</b> (≈ ${amount.toLocaleString()} so'm)\n\n` +
-          `To'lovni amalga oshirish uchun yuqoridagi xabardagi "Pay" tugmasini bosing.`,
+          `⭐ Счёт выставлен: <b>${starsAmount} Stars</b> (≈ ${amount.toLocaleString()} сум)\n\n` +
+          `Нажмите кнопку «Pay» в сообщении выше для оплаты.`,
           { parse_mode: 'HTML' }
         );
       } catch (e) {
-        await ctx.reply('❌ Hisob-faktura yaratishda xato: ' + e.message, backToMain());
+        await ctx.reply('❌ Ошибка при создании счёта: ' + e.message, backToMain());
       }
       return;
     }
 
-    // Karta orqali (chek bilan)
+    // Карта / Visa — требуем чек
     const { fee, credited } = calcFee(amount, s.topup_fee_percent);
-    waiting[ctx.from.id] = { step: 'receipt', method: 'card', amount, fee, credited };
+    waiting[ctx.from.id] = { step: 'receipt', method: w.method, amount, fee, credited };
+
+    let paymentDetails = '';
+    let methodLabel = '';
+
+    if (w.method === 'visa') {
+      const visaDetails = s.visa_details || 'Реквизиты не настроены';
+      const visaHolder = s.visa_holder || '';
+      methodLabel = 'Visa / международная карта';
+      paymentDetails =
+        `💳 <code>${visaDetails}</code>\n` +
+        (visaHolder ? `👤 ${visaHolder}\n` : '');
+    } else {
+      methodLabel = 'Банковская карта';
+      paymentDetails =
+        `💳 <code>${s.card_number}</code>\n` +
+        `👤 ${s.card_holder}\n`;
+    }
 
     await ctx.reply(
-      `💳 <b>To'lov</b>\n\n` +
-      `💰 To'lov summasi: <b>${amount.toLocaleString()} so'm</b>\n` +
-      `📉 Xizmat haqi (${s.topup_fee_percent}%): <b>−${fee.toLocaleString()} so'm</b>\n` +
-      `✅ Balansga qo'shiladigan summa: <b>${credited.toLocaleString()} so'm</b>\n\n` +
-      `Quyidagi kartaga ${amount.toLocaleString()} so'm o'tkazing:\n\n` +
-      `💳 <code>${s.card_number}</code>\n` +
-      `👤 ${s.card_holder}\n\n` +
-      `❗️To'lovdan so'ng chek rasmini shu yerga yuboring. Admin tasdiqlagach balansingiz to'ldiriladi.\n\n` +
-      `💬 Savol bo'lsa: ${s.support_username}`,
+      `💳 <b>Оплата</b>\n\n` +
+      `💰 Сумма перевода: <b>${amount.toLocaleString()} сум</b>\n` +
+      `📉 Комиссия (${s.topup_fee_percent}%): <b>−${fee.toLocaleString()} сум</b>\n` +
+      `✅ Будет зачислено на баланс: <b>${credited.toLocaleString()} сум</b>\n\n` +
+      `Переведите ${amount.toLocaleString()} сум на следующие реквизиты:\n\n` +
+      paymentDetails + '\n' +
+      `❗️После оплаты отправьте скриншот чека прямо сюда. Баланс будет пополнен после проверки администратором.\n\n` +
+      `💬 Вопросы: ${s.support_username}`,
       { parse_mode: 'HTML' }
     );
   });
@@ -143,16 +173,19 @@ function topupScene() {
     if (!w || w.step !== 'receipt') return;
     delete waiting[ctx.from.id];
 
-    const { amount, fee, credited } = w;
+    const { amount, fee, credited, method } = w;
     const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
 
+    const methodLabel = method === 'visa' ? 'Visa / международная карта' : 'Банковская карта';
+
     const caption =
-      `🧾 <b>Balans to'ldirish so'rovi (Karta)</b>\n\n` +
-      `👤 Foydalanuvchi: ${ctx.from.first_name} (@${ctx.from.username || '—'})\n` +
+      `🧾 <b>Запрос на пополнение баланса</b>\n` +
+      `💳 Метод: <b>${methodLabel}</b>\n\n` +
+      `👤 Пользователь: ${ctx.from.first_name} (@${ctx.from.username || '—'})\n` +
       `🆔 ID: <code>${ctx.from.id}</code>\n\n` +
-      `💰 Kelgan to'lov: <b>${amount.toLocaleString()} so'm</b>\n` +
-      `📉 Xizmat haqi: <b>${fee.toLocaleString()} so'm</b>\n` +
-      `✅ Balansga qo'shiladi: <b>${credited.toLocaleString()} so'm</b>`;
+      `💰 Переведено: <b>${amount.toLocaleString()} сум</b>\n` +
+      `📉 Комиссия: <b>${fee.toLocaleString()} сум</b>\n` +
+      `✅ К зачислению: <b>${credited.toLocaleString()} сум</b>`;
 
     for (const adminId of ADMIN_IDS) {
       try {
@@ -161,8 +194,8 @@ function topupScene() {
           parse_mode: 'HTML',
           ...Markup.inlineKeyboard([
             [
-              Markup.button.callback('✅ Tasdiqlash', `approve_topup_${ctx.from.id}_${credited}_${fee}`),
-              Markup.button.callback('❌ Rad etish', `reject_topup_${ctx.from.id}`),
+              Markup.button.callback('✅ Подтвердить', `approve_topup_${ctx.from.id}_${credited}_${fee}`),
+              Markup.button.callback('❌ Отклонить', `reject_topup_${ctx.from.id}`),
             ],
           ]),
         });
@@ -170,10 +203,10 @@ function topupScene() {
     }
 
     await ctx.reply(
-      `✅ Chek adminga yuborildi.\n\n` +
-      `💰 To'lov: ${amount.toLocaleString()} so'm\n` +
-      `📉 Xizmat haqi: ${fee.toLocaleString()} so'm\n` +
-      `✅ Tasdiqlangach balansga qo'shiladi: <b>${credited.toLocaleString()} so'm</b>`,
+      `✅ Чек отправлен администратору.\n\n` +
+      `💰 Оплата: ${amount.toLocaleString()} сум\n` +
+      `📉 Комиссия: ${fee.toLocaleString()} сум\n` +
+      `✅ После подтверждения будет зачислено: <b>${credited.toLocaleString()} сум</b>`,
       { parse_mode: 'HTML', ...backToMain() }
     );
     await ctx.scene.leave();
@@ -182,7 +215,6 @@ function topupScene() {
   return scene;
 }
 
-// Karta orqali to'lovni admin tasdiqlaganda chaqiriladi
 async function approveTopup(ctx, targetUserId, credited, fee) {
   const updated = await User.findOneAndUpdate(
     { telegramId: targetUserId },
@@ -192,19 +224,18 @@ async function approveTopup(ctx, targetUserId, credited, fee) {
   try {
     await ctx.telegram.sendMessage(
       targetUserId,
-      `✅ Balansingiz to'ldirildi!\n\n` +
-      `➕ Qo'shildi: <b>${credited.toLocaleString()} so'm</b>\n` +
-      `📉 Xizmat haqi (ushlab qolindi): <b>${fee.toLocaleString()} so'm</b>\n` +
-      `👛 Joriy balans: <b>${updated.balance.toLocaleString()} so'm</b>`,
+      `✅ Баланс пополнен!\n\n` +
+      `➕ Зачислено: <b>${credited.toLocaleString()} сум</b>\n` +
+      `📉 Комиссия (удержана): <b>${fee.toLocaleString()} сум</b>\n` +
+      `👛 Текущий баланс: <b>${updated.balance.toLocaleString()} сум</b>`,
       { parse_mode: 'HTML' }
     );
   } catch (e) {
-    console.error('Foydalanuvchiga xabar yuborishda xato:', e.message);
+    console.error('Ошибка отправки сообщения пользователю:', e.message);
   }
   return updated;
 }
 
-// Stars orqali to'lov muvaffaqiyatli bo'lganda chaqiriladi (index.js dagi successful_payment handlerida)
 async function creditStarsPayment(ctx, telegramId, amountUZS, starsCount) {
   await User.findOneAndUpdate(
     { telegramId },
@@ -212,9 +243,9 @@ async function creditStarsPayment(ctx, telegramId, amountUZS, starsCount) {
     { upsert: true }
   );
   await ctx.reply(
-    `✅ <b>To'lov muvaffaqiyatli!</b>\n\n` +
-    `⭐ To'landi: <b>${starsCount} Stars</b>\n` +
-    `➕ Balansga qo'shildi: <b>${amountUZS.toLocaleString()} so'm</b>`,
+    `✅ <b>Оплата прошла успешно!</b>\n\n` +
+    `⭐ Оплачено: <b>${starsCount} Stars</b>\n` +
+    `➕ Зачислено на баланс: <b>${amountUZS.toLocaleString()} сум</b>`,
     { parse_mode: 'HTML', ...backToMain() }
   );
 }
