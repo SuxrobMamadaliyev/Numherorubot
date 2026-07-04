@@ -1,18 +1,20 @@
 const { Settings } = require('./models');
 
 const DEFAULTS = {
-  markup_percent: 30,          // HeroSMS narxiga qo'shiladigan foiz (%)
-  usd_to_uzs: 12700,           // 1 dollar = ? so'm
-  topup_fee_percent: 3,        // Balans to'ldirishda ushlab qolinadigan komissiya (%)
-  star_to_uzs: 100,            // 1 Telegram Star = ? so'm (Stars orqali to'ldirishda balansga shu kursda qo'shiladi)
-  min_balance_uzs: 5000,       // Minimal balans (so'm)
-  referral_bonus_uzs: 10,    // Referal uchun bonus (so'm)
+  markup_percent: 30,
+  usd_to_uzs: 12700,
+  topup_fee_percent: 3,
+  star_to_uzs: 100,
+  min_balance_uzs: 5000,
+  referral_bonus_uzs: 10,
   card_number: '9860 1678 4936 3665',
   card_holder: 'Suhrob M',
+  visa_details: '',        // Номер Visa / международной карты
+  visa_holder: '',         // Имя владельца Visa
   support_username: '@suxacyber404',
-  force_sub_channels: [],      // Majburiy obuna kanallari roʻyxati (masalan: ['@kanal1', '@kanal2']). Cheksiz qoʻshish mumkin.
-  main_menu_image: '',         // Asosiy menyu tugmalari ustida chiqadigan rasm (Telegram file_id). Bo'sh bo'lsa — rasm yo'q.
-  proof_channel: '',           // Har bir xariddan keyin "isbot" post yuboriladigan kanal (masalan: @kanalim). Bo'sh bo'lsa — yuborilmaydi.
+  force_sub_channels: [],
+  main_menu_image: '',
+  proof_channel: '',
 };
 
 async function getSetting(key) {
@@ -32,12 +34,11 @@ async function getAllSettings() {
   return result;
 }
 
-// Narx hisoblash: dollardagi (HeroSMS) narxni so'mga o'tkazib, markup qo'shadi
 async function calcPriceUZS(costUSD) {
   const rate = await getSetting('usd_to_uzs');
   const markup = await getSetting('markup_percent');
   const base = costUSD * rate;
-  return Math.ceil(base * (1 + markup / 100) / 100) * 100; // 100 so'mga yaxlitlash
+  return Math.ceil(base * (1 + markup / 100) / 100) * 100;
 }
 
 module.exports = { getSetting, setSetting, getAllSettings, calcPriceUZS, DEFAULTS };
