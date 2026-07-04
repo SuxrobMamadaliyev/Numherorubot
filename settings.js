@@ -9,8 +9,8 @@ const DEFAULTS = {
   referral_bonus_uzs: 10,
   card_number: '9860 1678 4936 3665',
   card_holder: 'Suhrob M',
-  visa_details: '',        // Номер Visa / международной карты
-  visa_holder: '',         // Имя владельца Visa
+  visa_details: '4231 2000 8587 6505 ',        // Номер Visa / международной карты
+  visa_holder: 'Suhrob M',         // Имя владельца Visa
   support_username: '@suxacyber404',
   force_sub_channels: [],
   main_menu_image: '',
