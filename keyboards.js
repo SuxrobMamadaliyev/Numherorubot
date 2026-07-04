@@ -4,18 +4,18 @@ const { getSetting, calcPriceUZS } = require('./settings');
 
 function mainMenu(isAdmin = false) {
   const rows = [
-    [Markup.button.callback('🔥 Arzon nomerlar', 'cheap_numbers')],
+    [Markup.button.callback('🔥 Дешёвые номера', 'cheap_numbers')],
     [
-      Markup.button.callback('📱 Raqam olish', 'buy_number'),
-      Markup.button.callback('👤 Kabinet', 'cabinet'),
+      Markup.button.callback('📱 Купить номер', 'buy_number'),
+      Markup.button.callback('👤 Кабинет', 'cabinet'),
     ],
     [
-      Markup.button.callback("👛 Balans to'ldirish", 'topup'),
-      Markup.button.callback('❓ Yordam', 'help'),
+      Markup.button.callback('👛 Пополнить баланс', 'topup'),
+      Markup.button.callback('❓ Помощь', 'help'),
     ],
   ];
   if (isAdmin) {
-    rows.push([Markup.button.callback('⚙️ Admin panel', 'admin_panel')]);
+    rows.push([Markup.button.callback('⚙️ Админ панель', 'admin_panel')]);
   }
   return Markup.inlineKeyboard(rows);
 }
@@ -28,8 +28,8 @@ function servicesKeyboard() {
   for (let i = 0; i < buttons.length; i += 3) {
     rows.push(buttons.slice(i, i + 3));
   }
-  rows.push([Markup.button.callback('🔥 Eng arzon takliflar', 'cheap_numbers')]);
-  rows.push([Markup.button.callback('🔙 Bosh menyu', 'back_main')]);
+  rows.push([Markup.button.callback('🔥 Самые дешёвые предложения', 'cheap_numbers')]);
+  rows.push([Markup.button.callback('🔙 Главное меню', 'back_main')]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -41,15 +41,12 @@ function countriesKeyboard(serviceCode) {
   for (let i = 0; i < buttons.length; i += 3) {
     rows.push(buttons.slice(i, i + 3));
   }
-  rows.push([Markup.button.callback('🔥 Eng arzonini avtomatik tanlash', `cheapest_${serviceCode}`)]);
-  rows.push([Markup.button.callback('🔙 Servislar', 'buy_number')]);
+  rows.push([Markup.button.callback('🔥 Выбрать самый дешёвый автоматически', `cheapest_${serviceCode}`)]);
+  rows.push([Markup.button.callback('🔙 Сервисы', 'buy_number')]);
   return Markup.inlineKeyboard(rows);
 }
 
-// HeroSMS APIdagi BARCHA (mavjud) mamlakatlarni, har birining narxi bilan (so'mda)
-// koʻrsatadigan klaviatura. Eng arzonidan qimmatiga qarab saralangan.
-// Faqat hozircha raqami mavjud (count > 0) davlatlar chiqadi.
-const MAX_COUNTRY_BUTTONS = 80; // Telegram inline klaviatura limitidan xavfsiz chegara
+const MAX_COUNTRY_BUTTONS = 80;
 
 async function allCountriesKeyboard(apiKey, serviceCode) {
   const offers = await getAllOffersForService(apiKey, serviceCode);
@@ -60,84 +57,82 @@ async function allCountriesKeyboard(apiKey, serviceCode) {
     const priceUZS = await calcPriceUZS(o.cost);
     rows.push([
       Markup.button.callback(
-        `${o.name} — ${priceUZS.toLocaleString()} so'm`,
+        `${o.name} — ${priceUZS.toLocaleString()} сум`,
         `cnt_${serviceCode}_${o.code}`
       ),
     ]);
   }
 
-  rows.push([Markup.button.callback('🔥 Eng arzonini avtomatik tanlash', `cheapest_${serviceCode}`)]);
-  rows.push([Markup.button.callback('🔙 Servislar', 'buy_number')]);
+  rows.push([Markup.button.callback('🔥 Выбрать самый дешёвый автоматически', `cheapest_${serviceCode}`)]);
+  rows.push([Markup.button.callback('🔙 Сервисы', 'buy_number')]);
   return { keyboard: Markup.inlineKeyboard(rows), count: offers.length, shown: shown.length };
 }
 
 function adminPanelKeyboard() {
   return Markup.inlineKeyboard([
     [
-      Markup.button.callback('💰 Markup %', 'adm_markup'),
-      Markup.button.callback('💱 USD kurs', 'adm_usdrate'),
+      Markup.button.callback('💰 Наценка %', 'adm_markup'),
+      Markup.button.callback('💱 Курс USD', 'adm_usdrate'),
     ],
     [
-      Markup.button.callback('📉 Toʻldirish komissiyasi', 'adm_topupfee'),
-      Markup.button.callback('⭐ Stars kursi', 'adm_starsrate'),
+      Markup.button.callback('📉 Комиссия пополнения', 'adm_topupfee'),
+      Markup.button.callback('⭐ Курс Stars', 'adm_starsrate'),
     ],
     [
-      Markup.button.callback('💳 Karta', 'adm_card'),
-      Markup.button.callback('📢 Majburiy kanallar', 'adm_channel'),
+      Markup.button.callback('💳 Карта', 'adm_card'),
+      Markup.button.callback('💳 Visa реквизиты', 'adm_visa'),
     ],
-    [Markup.button.callback('🎁 Referal bonusi', 'adm_refbonus')],
-    [Markup.button.callback('🧾 Isbot kanali', 'adm_proofchannel')],
-    [Markup.button.callback('🖼 Bosh menyu rasmi', 'adm_image')],
-    [Markup.button.callback('👥 Foydalanuvchilar balansi', 'adm_balances')],
-    [Markup.button.callback('📣 Barchaga xabar yuborish', 'adm_broadcast')],
-    [Markup.button.callback('📊 Statistika', 'adm_stats')],
-    [Markup.button.callback('🔙 Bosh menyu', 'back_main')],
+    [Markup.button.callback('📢 Обязательные каналы', 'adm_channel')],
+    [Markup.button.callback('🎁 Реф. бонус', 'adm_refbonus')],
+    [Markup.button.callback('🧾 Канал доказательств', 'adm_proofchannel')],
+    [Markup.button.callback('🖼 Фото главного меню', 'adm_image')],
+    [Markup.button.callback('👥 Балансы пользователей', 'adm_balances')],
+    [Markup.button.callback('📣 Рассылка всем', 'adm_broadcast')],
+    [Markup.button.callback('📊 Статистика', 'adm_stats')],
+    [Markup.button.callback('🔙 Главное меню', 'back_main')],
   ]);
 }
 
-
 function balancesMenuKeyboard(page, totalPages) {
   const navRow = [];
-  if (page > 0) navRow.push(Markup.button.callback('⬅️ Oldingi', `adm_balances_page_${page - 1}`));
-  if (page < totalPages - 1) navRow.push(Markup.button.callback('Keyingi ➡️', `adm_balances_page_${page + 1}`));
+  if (page > 0) navRow.push(Markup.button.callback('⬅️ Назад', `adm_balances_page_${page - 1}`));
+  if (page < totalPages - 1) navRow.push(Markup.button.callback('Вперёд ➡️', `adm_balances_page_${page + 1}`));
 
   const rows = [];
   if (navRow.length) rows.push(navRow);
-  rows.push([Markup.button.callback('🗑 Barcha balanslarni 0 qilish', 'adm_balances_reset_confirm')]);
-  rows.push([Markup.button.callback('🔙 Admin panel', 'admin_panel')]);
+  rows.push([Markup.button.callback('🗑 Обнулить все балансы', 'adm_balances_reset_confirm')]);
+  rows.push([Markup.button.callback('🔙 Админ панель', 'admin_panel')]);
   return Markup.inlineKeyboard(rows);
 }
 
 function balancesResetConfirmKeyboard() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('✅ Ha, hammasini 0 qilish', 'adm_balances_reset_do')],
-    [Markup.button.callback('❌ Bekor qilish', 'adm_balances')],
+    [Markup.button.callback('✅ Да, обнулить всё', 'adm_balances_reset_do')],
+    [Markup.button.callback('❌ Отмена', 'adm_balances')],
   ]);
 }
 
 function backToAdmin() {
-  return Markup.inlineKeyboard([[Markup.button.callback('🔙 Admin panel', 'admin_panel')]]);
+  return Markup.inlineKeyboard([[Markup.button.callback('🔙 Админ панель', 'admin_panel')]]);
 }
 
 function backToMain() {
-  return Markup.inlineKeyboard([[Markup.button.callback('🔙 Bosh menyu', 'back_main')]]);
+  return Markup.inlineKeyboard([[Markup.button.callback('🔙 Главное меню', 'back_main')]]);
 }
 
 function confirmBuyKeyboard(serviceCode, countryCode) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('✅ Tasdiqlash', `confirm_${serviceCode}_${countryCode}`)],
-    [Markup.button.callback('❌ Bekor qilish', 'back_main')],
+    [Markup.button.callback('✅ Подтвердить', `confirm_${serviceCode}_${countryCode}`)],
+    [Markup.button.callback('❌ Отмена', 'back_main')],
   ]);
 }
 
 function cancelActivationKeyboard(activationId) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('🚫 Bekor qilish', `cancel_act_${activationId}`)],
+    [Markup.button.callback('🚫 Отменить', `cancel_act_${activationId}`)],
   ]);
 }
 
-// Asosiy menyuni (matn + tugmalar) admin tomonidan o'rnatilgan rasm bilan yoki rasmsiz chiqaradi.
-// edit=true bo'lsa, mavjud xabarni tahrirlashga harakat qiladi (callback orqali chaqirilganda).
 async function sendMainMenu(ctx, text, keyboard, { edit = false } = {}) {
   const image = await getSetting('main_menu_image');
 
@@ -150,7 +145,6 @@ async function sendMainMenu(ctx, text, keyboard, { edit = false } = {}) {
         );
         return;
       } catch (e) {
-        // Eski xabar rasm emas edi (matn xabar) — uni o'chirib, yangi rasm xabarini yuboramiz
         try { await ctx.deleteMessage(); } catch {}
       }
     }
@@ -158,8 +152,7 @@ async function sendMainMenu(ctx, text, keyboard, { edit = false } = {}) {
       await ctx.replyWithPhoto(image, { caption: text, parse_mode: 'HTML', ...keyboard });
       return;
     } catch (e) {
-      console.error('Bosh menyu rasmini yuborishda xato:', e.message);
-      // rasm yuborib bo'lmadi — pastda matn sifatida yuboramiz
+      console.error('Ошибка отправки фото главного меню:', e.message);
     }
   }
 
@@ -172,8 +165,6 @@ async function sendMainMenu(ctx, text, keyboard, { edit = false } = {}) {
   await ctx.reply(text, { parse_mode: 'HTML', ...keyboard });
 }
 
-// Xabarni tahrirlashga urinadi; agar joriy xabar matn bo'lmasa (masalan rasm bo'lsa)
-// yoki boshqa sababdan tahrirlab bo'lmasa, eski xabarni o'chirib, yangisini yuboradi.
 async function safeEdit(ctx, text, extra = {}) {
   try {
     return await ctx.editMessageText(text, extra);
