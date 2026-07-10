@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
   telegramId: { type: Number, required: true, unique: true },
   username: String,
   fullName: String,
-  balance: { type: Number, default: 0 }, // UZS
+  balance: { type: Number, default: 0 }, // USD
   totalSpent: { type: Number, default: 0 },
   totalFeeCollected: { type: Number, default: 0 }, // Balans to'ldirishda ushlab qolingan komissiya
   referredBy: Number,
@@ -26,7 +26,7 @@ const activationSchema = new mongoose.Schema({
   service: String,
   country: String,
   phoneNumber: String,
-  pricePaid: Number, // UZS
+  pricePaid: Number, // USD
   status: { type: String, default: 'pending' }, // pending | success | cancelled
   code: String,
   createdAt: { type: Date, default: Date.now },
