@@ -1,5 +1,5 @@
 const { Scenes, Markup } = require('telegraf');
-const { getSetting, setSetting, getAllSettings } = require('./settings');
+const { getSetting, setSetting, getAllSettings, fmtUSD } = require('./settings');
 const { adminPanelKeyboard, balancesMenuKeyboard, balancesResetConfirmKeyboard, backToAdmin, safeEdit } = require('./keyboards');
 const { User, Activation } = require('./models');
 const { getBalance } = require('./herosms');
@@ -12,12 +12,11 @@ async function showAdminPanel(ctx) {
     `⚙️ <b>Admin Panel</b>\n\n` +
     `💰 Markup (raqam narxiga): <b>${s.markup_percent}%</b>\n` +
     `📉 Toʻldirish komissiyasi: <b>${s.topup_fee_percent}%</b>\n` +
-    `⭐ Stars kursi: <b>1⭐ = ${s.star_to_uzs.toLocaleString()} so'm</b>\n` +
-    `💱 USD/UZS kurs: <b>${s.usd_to_uzs.toLocaleString()} so'm</b>\n` +
-    `💳 Karta: <b>${s.card_number}</b>\n` +
-    `👤 Egasi: <b>${s.card_holder}</b>\n` +
+    `⭐ Stars kursi: <b>1⭐ ≈ ${fmtUSD(s.star_to_usd)}</b>\n` +
+    `💳 Visa: <b>${s.visa_details || 'oʻrnatilmagan'}</b>\n` +
+    `👤 Egasi: <b>${s.visa_holder || '—'}</b>\n` +
     `📢 Majburiy kanallar: <b>${channels.length ? channels.length + ' ta' : 'oʻchirilgan'}</b>\n` +
-    `🎁 Referal bonusi: <b>${(s.referral_bonus_uzs || 0).toLocaleString()} so'm</b>\n` +
+    `🎁 Referal bonusi: <b>${fmtUSD(s.referral_bonus_usd)}</b>\n` +
     `🖼 Bosh menyu rasmi: <b>${s.main_menu_image ? 'oʻrnatilgan' : 'oʻrnatilmagan'}</b>\n` +
     `🧾 Isbot kanali: <b>${s.proof_channel || 'oʻrnatilmagan'}</b>\n` +
     `💬 Support: <b>${s.support_username}</b>`;
@@ -51,13 +50,13 @@ async function showBalancesPage(ctx, page = 0) {
   const lines = users.map((u, i) => {
     const num = page * BALANCES_PAGE_SIZE + i + 1;
     const name = u.username ? `@${u.username}` : (u.fullName || `ID:${u.telegramId}`);
-    return `${num}. ${name} — <b>${(u.balance || 0).toLocaleString()} so'm</b>`;
+    return `${num}. ${name} — <b>${fmtUSD(u.balance)}</b>`;
   });
 
   const text =
     `👥 <b>Foydalanuvchilar balansi</b>\n\n` +
     (lines.length ? lines.join('\n') : 'Foydalanuvchilar topilmadi.') +
-    `\n\n💰 Jami balans (barcha foydalanuvchilar): <b>${totalBalance.toLocaleString()} so'm</b>\n` +
+    `\n\n💰 Jami balans (barcha foydalanuvchilar): <b>${fmtUSD(totalBalance)}</b>\n` +
     `📄 Sahifa: ${page + 1}/${totalPages}`;
 
   await safeEdit(ctx, text, { parse_mode: 'HTML', ...balancesMenuKeyboard(page, totalPages) });
@@ -128,12 +127,11 @@ function adminScene() {
   // Har bir tugma uchun "qiymat kirit" so'rash
   const promptMap = {
     adm_markup:     { key: 'markup_percent',     label: 'Yangi markup foizini kiriting (masalan: 25)' },
-    adm_usdrate:    { key: 'usd_to_uzs',         label: "1 USD = ? so'm (masalan: 12700)" },
     adm_topupfee:   { key: 'topup_fee_percent',  label: "Balans to'ldirish komissiyasini kiriting % (masalan: 5)" },
-    adm_starsrate:  { key: 'star_to_uzs',        label: "1 Telegram Star necha so'mligini kiriting (masalan: 220)" },
-    adm_card:       { key: '_card_combo',        label: 'Karta raqami va egasini kiriting:\nFormat: KARTA_RAQAMI|Ism Familiya\nMasalan: 8600 1234 5678 9012|Karimov Karim' },
+    adm_starsrate:  { key: 'star_to_usd',        label: "1 Telegram Star necha dollar turishini kiriting (masalan: 0.02)" },
+    adm_visa:       { key: '_visa_combo',        label: "Visa/xalqaro karta rekvizitlari va egasini kiriting:\nFormat: REKVIZIT|Ism Familiya\nMasalan: 4231 2000 8587 6505|Suhrob M" },
     adm_support:    { key: 'support_username',   label: 'Support username kiriting (masalan: @admin_support)' },
-    adm_refbonus:   { key: 'referral_bonus_uzs', label: "Referal uchun beriladigan bonus miqdorini kiriting, so'mda (masalan: 3000)" },
+    adm_refbonus:   { key: 'referral_bonus_usd', label: "Referal uchun beriladigan bonus miqdorini dollarda kiriting (masalan: 0.5)" },
     adm_proofchannel: {
       key: 'proof_channel',
       label: "Isbot kanali username kiriting (masalan: @kanalim).\n❗️Bot shu kanalda admin boʻlishi shart, aks holda postlar yuborilmaydi.\nOʻchirish uchun \"-\" belgisini yuboring.",
@@ -340,8 +338,8 @@ function adminScene() {
         `👥 Jami foydalanuvchilar: <b>${totalUsers}</b>\n` +
         `📱 Jami aktivatsiyalar: <b>${totalActivations}</b>\n` +
         `✅ Muvaffaqiyatli: <b>${successAct}</b>\n\n` +
-        `💵 Raqamlardan tushgan (sotuv): <b>${totalSales.toLocaleString()} so'm</b>\n` +
-        `📉 To'ldirish komissiyasidan: <b>${totalFee.toLocaleString()} so'm</b>\n\n` +
+        `💵 Raqamlardan tushgan (sotuv): <b>${fmtUSD(totalSales)}</b>\n` +
+        `📉 To'ldirish komissiyasidan: <b>${fmtUSD(totalFee)}</b>\n\n` +
         `💰 HeroSMS balansi: <b>${heroBalance}</b>\n` +
         `⭐ Bot Stars balansi: <b>${starsBalance}</b>`,
         { parse_mode: 'HTML', ...backToAdmin() }
@@ -428,14 +426,14 @@ function adminScene() {
     delete waiting[ctx.from.id];
 
     try {
-      if (w.key === '_card_combo') {
-        const [cardNum, cardHolder] = val.split('|').map(s => s.trim());
-        if (!cardNum || !cardHolder) {
-          return ctx.reply("❌ Format xato! Qaytadan urinib ko'ring:\n8600 XXXX XXXX XXXX|Ism Familiya");
+      if (w.key === '_visa_combo') {
+        const [details, holder] = val.split('|').map(s => s.trim());
+        if (!details || !holder) {
+          return ctx.reply("❌ Format xato! Qaytadan urinib ko'ring:\nREKVIZIT|Ism Familiya");
         }
-        await setSetting('card_number', cardNum);
-        await setSetting('card_holder', cardHolder);
-        await ctx.reply(`✅ Karta yangilandi:\n💳 ${cardNum}\n👤 ${cardHolder}`, backToAdmin());
+        await setSetting('visa_details', details);
+        await setSetting('visa_holder', holder);
+        await ctx.reply(`✅ Visa rekvizitlari yangilandi:\n💳 ${details}\n👤 ${holder}`, backToAdmin());
       } else if (w.key === '_channel_add') {
         let channel = val.trim();
         if (!channel.startsWith('@') && !channel.startsWith('https://t.me/')) {
@@ -462,7 +460,7 @@ function adminScene() {
         }
       } else {
         const numVal = parseFloat(val);
-        if (['markup_percent', 'usd_to_uzs', 'topup_fee_percent', 'star_to_uzs', 'referral_bonus_uzs'].includes(w.key)) {
+        if (['markup_percent', 'topup_fee_percent', 'star_to_usd', 'referral_bonus_usd'].includes(w.key)) {
           if (isNaN(numVal) || numVal < 0) {
             return ctx.reply("❌ Iltimos, to'g'ri raqam kiriting.", backToAdmin());
           }
