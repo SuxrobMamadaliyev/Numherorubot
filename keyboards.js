@@ -1,6 +1,6 @@
 const { Markup } = require('telegraf');
-const { SERVICES, COUNTRIES, getAllOffersForService } = require('./herosms');
-const { getSetting, calcPriceUZS } = require('./settings');
+const { SERVICES, getAllOffersForService, getPopularCountries } = require('./herosms');
+const { getSetting, calcPriceUSD, fmtUSD } = require('./settings');
 
 function mainMenu(isAdmin = false) {
   const rows = [
@@ -33,8 +33,9 @@ function servicesKeyboard() {
   return Markup.inlineKeyboard(rows);
 }
 
-function countriesKeyboard(serviceCode) {
-  const buttons = COUNTRIES.map(c =>
+async function countriesKeyboard(apiKey, serviceCode) {
+  const countries = await getPopularCountries(apiKey);
+  const buttons = countries.map(c =>
     Markup.button.callback(c.name, `cnt_${serviceCode}_${c.code}`)
   );
   const rows = [];
@@ -54,10 +55,10 @@ async function allCountriesKeyboard(apiKey, serviceCode) {
 
   const rows = [];
   for (const o of shown) {
-    const priceUZS = await calcPriceUZS(o.cost);
+    const priceUSD = await calcPriceUSD(o.cost);
     rows.push([
       Markup.button.callback(
-        `${o.name} — ${priceUZS.toLocaleString()} сум`,
+        `${o.name} — ${fmtUSD(priceUSD)}`,
         `cnt_${serviceCode}_${o.code}`
       ),
     ]);
@@ -72,14 +73,10 @@ function adminPanelKeyboard() {
   return Markup.inlineKeyboard([
     [
       Markup.button.callback('💰 Наценка %', 'adm_markup'),
-      Markup.button.callback('💱 Курс USD', 'adm_usdrate'),
-    ],
-    [
       Markup.button.callback('📉 Комиссия пополнения', 'adm_topupfee'),
-      Markup.button.callback('⭐ Курс Stars', 'adm_starsrate'),
     ],
     [
-      Markup.button.callback('💳 Карта', 'adm_card'),
+      Markup.button.callback('⭐ Курс Stars ($)', 'adm_starsrate'),
       Markup.button.callback('💳 Visa реквизиты', 'adm_visa'),
     ],
     [Markup.button.callback('📢 Обязательные каналы', 'adm_channel')],
