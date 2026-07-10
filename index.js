@@ -6,6 +6,7 @@ const { User, Activation } = require('./models');
 const { isAdmin, adminOnly, ADMIN_IDS } = require('./admin');
 const { mainMenu, backToMain, sendMainMenu, safeEdit } = require('./keyboards');
 const { requireChannelSub } = require('./channelSub');
+const { fmtUSD } = require('./settings');
 
 const { adminScene, showAdminPanel } = require('./adminScene');
 const { topupScene, showTopupMenu, approveTopup, creditStarsPayment } = require('./topupScene');
@@ -66,8 +67,8 @@ bot.start(async ctx => {
     const existing = await User.findOne({ telegramId: ctx.from.id });
     if (existing && !existing.referredBy) {
       await User.updateOne({ telegramId: ctx.from.id }, { referredBy: parseInt(payload) });
-      const { getSetting } = require('./settings');
-      const bonus = await getSetting('referral_bonus_uzs');
+      const { getSetting, fmtUSD } = require('./settings');
+      const bonus = await getSetting('referral_bonus_usd');
       await User.updateOne(
         { telegramId: parseInt(payload) },
         { $inc: { balance: bonus, referralCount: 1 } }
@@ -75,7 +76,7 @@ bot.start(async ctx => {
       try {
         await ctx.telegram.sendMessage(
           payload,
-          `🎉 По вашей реферальной ссылке зарегистрировался новый пользователь!\n💰 +${bonus.toLocaleString()} сум зачислено на баланс.`
+          `🎉 По вашей реферальной ссылке зарегистрировался новый пользователь!\n💰 +${fmtUSD(bonus)} зачислено на баланс.`
         );
       } catch {}
     }
@@ -88,7 +89,7 @@ bot.start(async ctx => {
     ctx,
     `👋 Привет, ${ctx.from.first_name}!\n\n` +
     `📱 Через этого бота вы можете купить виртуальные номера для различных сервисов.\n\n` +
-    `👛 Ваш баланс: <b>${balance.toLocaleString()} сум</b>\n\n` +
+    `👛 Ваш баланс: <b>${fmtUSD(balance)}</b>\n\n` +
     `🔥 Нажмите кнопку ниже, чтобы увидеть самые выгодные предложения.`,
     mainMenu(admin),
     { edit: false }
@@ -113,7 +114,7 @@ bot.action('back_main', async ctx => {
   const admin = isAdmin(ctx.from.id);
   const userDoc = await User.findOne({ telegramId: ctx.from.id });
   const balance = userDoc?.balance || 0;
-  const text = `🏠 <b>Главное меню</b>\n\n👛 Ваш баланс: <b>${balance.toLocaleString()} сум</b>`;
+  const text = `🏠 <b>Главное меню</b>\n\n👛 Ваш баланс: <b>${fmtUSD(balance)}</b>`;
   await sendMainMenu(ctx, text, mainMenu(admin), { edit: true });
 });
 
@@ -140,7 +141,7 @@ bot.action('cabinet', async ctx => {
   const activations = await Activation.find({ telegramId: ctx.from.id }).sort({ createdAt: -1 }).limit(5);
 
   let histText = activations.length
-    ? activations.map(a => `• ${a.service} (${a.status === 'success' ? '✅' : a.status === 'pending' ? '⏳' : '❌'}) — ${a.pricePaid.toLocaleString()} сум`).join('\n')
+    ? activations.map(a => `• ${a.service} (${a.status === 'success' ? '✅' : a.status === 'pending' ? '⏳' : '❌'}) — ${fmtUSD(a.pricePaid)}`).join('\n')
     : 'История пуста.';
 
   const refLink = `https://t.me/${ctx.botInfo.username}?start=${ctx.from.id}`;
@@ -148,8 +149,8 @@ bot.action('cabinet', async ctx => {
   await safeEdit(ctx,
     `👤 <b>Кабинет</b>\n\n` +
     `🆔 ID: <code>${ctx.from.id}</code>\n` +
-    `👛 Баланс: <b>${(user?.balance || 0).toLocaleString()} сум</b>\n` +
-    `💸 Всего потрачено: <b>${(user?.totalSpent || 0).toLocaleString()} сум</b>\n` +
+    `👛 Баланс: <b>${fmtUSD(user?.balance)}</b>\n` +
+    `💸 Всего потрачено: <b>${fmtUSD(user?.totalSpent)}</b>\n` +
     `👥 Рефералов: <b>${user?.referralCount || 0}</b>\n\n` +
     `📜 <b>Последние покупки:</b>\n${histText}\n\n` +
     `🔗 Реферальная ссылка:\n<code>${refLink}</code>`,
@@ -210,7 +211,7 @@ bot.action(/^approve_topup_(\d+)_(\d+)_(\d+)$/, async ctx => {
     const updated = await approveTopup(ctx, targetUserId, credited, fee);
     await ctx.editMessageCaption(
       ctx.callbackQuery.message.caption +
-        `\n\n✅ <b>ПОДТВЕРЖДЕНО</b> (новый баланс: ${updated.balance.toLocaleString()} сум)`,
+        `\n\n✅ <b>ПОДТВЕРЖДЕНО</b> (новый баланс: ${fmtUSD(updated.balance)})`,
       { parse_mode: 'HTML' }
     );
   } catch (e) {
@@ -245,7 +246,7 @@ bot.command('addbalance', async ctx => {
   if (!isAdmin(ctx.from.id)) return;
   const parts = ctx.message.text.split(' ').filter(Boolean);
   if (parts.length !== 3) {
-    return ctx.reply('Формат: /addbalance <telegram_id> <сумма>\nПример: /addbalance 123456789 50000');
+    return ctx.reply('Формат: /addbalance <telegram_id> <сумма>\nПример: /addbalance 123456789 10');
   }
   const [, targetId, amountStr] = parts;
   const amount = parseFloat(amountStr);
@@ -256,9 +257,9 @@ bot.command('addbalance', async ctx => {
     { $inc: { balance: amount } },
     { upsert: true }
   );
-  await ctx.reply(`✅ Пользователю ${targetId} начислено ${amount.toLocaleString()} сум.`);
+  await ctx.reply(`✅ Пользователю ${targetId} начислено ${fmtUSD(amount)}.`);
   try {
-    await ctx.telegram.sendMessage(targetId, `💰 На ваш баланс зачислено ${amount.toLocaleString()} сум!`);
+    await ctx.telegram.sendMessage(targetId, `💰 На ваш баланс зачислено ${fmtUSD(amount)}!`);
   } catch {}
 });
 
@@ -277,10 +278,10 @@ bot.on('successful_payment', async ctx => {
 
   const starsCount = payment.total_amount;
   const parts = (payment.invoice_payload || '').split('_');
-  const amountUZS = parseInt(parts[2]) || 0;
+  const amountCents = parseInt(parts[2]) || 0;
 
-  if (amountUZS > 0) {
-    await creditStarsPayment(ctx, ctx.from.id, amountUZS, starsCount);
+  if (amountCents > 0) {
+    await creditStarsPayment(ctx, ctx.from.id, amountCents, starsCount);
   } else {
     await ctx.reply('✅ Платёж получен, но не удалось определить сумму. Обратитесь к администратору.');
   }
