@@ -33,12 +33,60 @@ const COUNTRIES = [
   { code: '13', name: '🇪🇬 Misr' },
 ];
 
+// Juda arzon (odatda $0.02–0.03 atrofida) raqamlar ko'pincha allaqachon
+// ishlatilgan/bloklangan bo'lib, SMS kelmasligi ehtimoli yuqori bo'ladi.
+// Shu sabab "eng arzon takliflar"da bu chegaradan pastdagilar chiqarib tashlanadi.
+const MIN_RELIABLE_COST_USD = 0.05;
+
 async function apiRequest(apiKey, params) {
   const res = await axios.get(API_URL, {
     params: { api_key: apiKey, ...params },
     timeout: 15000,
   });
   return res.data;
+}
+
+// Arminiya va Qirg'iziston uchun mamlakat ID'lari provayderlar orasida farq
+// qilishi mumkin, shuning uchun ularni statik ro'yxatda qattiq yozib qo'yish
+// xavfli (noto'g'ri davlat raqami berilib qolishi mumkin). Buning o'rniga
+// haqiqiy ID'lar HeroSMS'ning o'z getCountries javobidan nomi bo'yicha
+// (eng/rus) qidirib topiladi va 24 soatga keshlanadi.
+const EXTRA_POPULAR_COUNTRIES = [
+  { match: ['armenia', 'армения'], label: '🇦🇲 Arminiya' },
+  { match: ['kyrgyzstan', 'киргизия', 'кыргызстан'], label: '🇰🇬 Qirgʻiziston' },
+];
+let extraCountryCache = { data: null, ts: 0 };
+const EXTRA_COUNTRY_TTL = 24 * 60 * 60 * 1000;
+
+async function getExtraPopularCountries(apiKey) {
+  const now = Date.now();
+  if (extraCountryCache.data && now - extraCountryCache.ts < EXTRA_COUNTRY_TTL) {
+    return extraCountryCache.data;
+  }
+  try {
+    const all = await getAllCountries(apiKey);
+    const found = [];
+    for (const wanted of EXTRA_POPULAR_COUNTRIES) {
+      for (const code of Object.keys(all || {})) {
+        const meta = all[code] || {};
+        const names = [meta.eng, meta.rus].filter(Boolean).map(n => String(n).toLowerCase());
+        if (wanted.match.some(m => names.includes(m))) {
+          found.push({ code: String(code), name: wanted.label });
+          break;
+        }
+      }
+    }
+    extraCountryCache = { data: found, ts: now };
+    return found;
+  } catch {
+    return extraCountryCache.data || [];
+  }
+}
+
+// COUNTRIES ro'yxatini Arminiya/Qirg'iziston bilan birga qaytaradi (mavjud bo'lsa).
+async function getPopularCountries(apiKey) {
+  const extra = await getExtraPopularCountries(apiKey);
+  return [...COUNTRIES, ...extra];
 }
 
 async function getBalance(apiKey) {
@@ -94,7 +142,7 @@ async function getAllOffersForService(apiKey, serviceCode) {
     if (!info) continue;
     const cost = parseFloat(info.cost || info.retail_price || 0);
     const count = parseInt(info.count || 0);
-    if (!(cost > 0) || count <= 0) continue;
+    if (!(cost >= MIN_RELIABLE_COST_USD) || count <= 0) continue;
 
     const staticC = COUNTRIES.find(x => x.code === String(code));
     const meta = countries?.[code];
@@ -143,7 +191,7 @@ async function getCheapestForService(apiKey, serviceCode) {
       if (!info) continue;
       const cost = parseFloat(info.cost || info.retail_price || 0);
       const count = parseInt(info.count || 0);
-      if (count > 0 && cost > 0 && (!best || cost < best.cost)) {
+      if (count > 0 && cost >= MIN_RELIABLE_COST_USD && (!best || cost < best.cost)) {
         best = { countryCode: String(countryCode), cost, count };
       }
     }
@@ -215,6 +263,7 @@ module.exports = {
   getCheapOffers,
   getAllCountries,
   getAllOffersForService,
+  getPopularCountries,
   countryName,
   ERROR_MAP,
 };
