@@ -1,6 +1,6 @@
 const { Markup } = require('telegraf');
 const { User, Activation } = require('./models');
-const { getSetting, calcPriceUZS } = require('./settings');
+const { getSetting, calcPriceUSD, fmtUSD } = require('./settings');
 const {
   getNumber,
   getStatus,
@@ -10,7 +10,7 @@ const {
   getCheapOffers,
   countryName,
   SERVICES,
-  COUNTRIES,
+  getPopularCountries,
   ERROR_MAP,
 } = require('./herosms');
 const {
@@ -36,8 +36,9 @@ const MAX_WAIT = 2 * 60 * 1000; // 2 минуты
 function findService(code) {
   return SERVICES.find(s => s.code === code);
 }
-function findCountry(code) {
-  return COUNTRIES.find(c => c.code === code);
+async function findCountry(countryCode) {
+  const countries = await getPopularCountries(process.env.HEROSMS_API_KEY);
+  return countries.find(c => c.code === countryCode);
 }
 
 function maskPhone(phone) {
@@ -73,7 +74,7 @@ async function postProofToChannel(ctx, { countryName, phoneNumber }) {
   }
 }
 
-const calcPrice = calcPriceUZS;
+const calcPrice = calcPriceUSD;
 
 async function showServices(ctx) {
   const text =
@@ -113,21 +114,22 @@ async function handleServiceSelect(ctx, serviceCode) {
     const note = shown < count ? `\n\n(Показаны ${shown} самых дешёвых из ${count} доступных)` : '';
     return safeEdit(ctx,
       `${svc.name}\n${DIVIDER}\n🌍 Выберите страну (${shown} доступно):\n\n` +
-      `💰 Цена рядом с каждой страной указана в сумах.${note}`,
+      `💰 Цена рядом с каждой страной указана в долларах.${note}`,
       { parse_mode: 'HTML', ...keyboard }
     );
   }
 
+  const kb = await countriesKeyboard(process.env.HEROSMS_API_KEY, serviceCode);
   await safeEdit(ctx,
     `${svc.name}\n${DIVIDER}\n🌍 Выберите страну:\n\n` +
     `💡 Если не знаете, где дешевле — нажмите <b>«🔥 Выбрать самый дешёвый автоматически»</b>.`,
-    { parse_mode: 'HTML', ...countriesKeyboard(serviceCode) }
+    { parse_mode: 'HTML', ...kb }
   );
 }
 
 async function renderCountryOffer(ctx, serviceCode, countryCode) {
   const svc = findService(serviceCode);
-  const cnt = findCountry(countryCode) || { code: countryCode, name: countryName(countryCode) };
+  const cnt = (await findCountry(countryCode)) || { code: countryCode, name: countryName(countryCode) };
   if (!svc) return;
 
   const { cost, count, ok } = await getNumberPrice(process.env.HEROSMS_API_KEY, serviceCode, countryCode);
@@ -137,7 +139,7 @@ async function renderCountryOffer(ctx, serviceCode, countryCode) {
       `⚠️ <b>Не удалось получить цену</b>\n${DIVIDER}\n` +
       `Сервер HeroSMS не ответил для ${svc.name} — ${cnt.name}.\n` +
       `Попробуйте позже.`,
-      { parse_mode: 'HTML', ...countriesKeyboard(serviceCode) }
+      { parse_mode: 'HTML', ...(await countriesKeyboard(process.env.HEROSMS_API_KEY, serviceCode)) }
     );
   }
 
@@ -146,23 +148,23 @@ async function renderCountryOffer(ctx, serviceCode, countryCode) {
       `📭 <b>Номера закончились</b>\n${DIVIDER}\n` +
       `Для ${svc.name} — ${cnt.name} сейчас нет доступных номеров.\n` +
       `Выберите другую страну или воспользуйтесь «🔥 Выбрать самый дешёвый автоматически».`,
-      { parse_mode: 'HTML', ...countriesKeyboard(serviceCode) }
+      { parse_mode: 'HTML', ...(await countriesKeyboard(process.env.HEROSMS_API_KEY, serviceCode)) }
     );
   }
 
-  const priceUZS = await calcPrice(cost);
+  const priceUSD = await calcPrice(cost);
 
   const user = await User.findOne({ telegramId: ctx.from.id });
   const balance = user?.balance || 0;
-  const enough = balance >= priceUZS;
+  const enough = balance >= priceUSD;
 
   const text =
     `📋 <b>Информация о заказе</b>\n${DIVIDER}\n` +
     `🔧 Сервис: <b>${svc.name}</b>\n` +
     `🌍 Страна: <b>${cnt.name}</b>\n` +
-    `💰 Цена: <b>${priceUZS.toLocaleString()} сум</b>\n` +
+    `💰 Цена: <b>${fmtUSD(priceUSD)}</b>\n` +
     `📦 Доступно номеров: <b>${count} шт.</b>\n${DIVIDER}\n` +
-    `👛 Ваш баланс: <b>${balance.toLocaleString()} сум</b>\n\n` +
+    `👛 Ваш баланс: <b>${fmtUSD(balance)}</b>\n\n` +
     (enough
       ? `✅ Баланса достаточно. Подтвердить?`
       : `❌ Недостаточно средств. Пожалуйста, пополните баланс.`);
@@ -188,7 +190,7 @@ async function handleCheapestForService(ctx, serviceCode) {
     return safeEdit(ctx,
       `📭 <b>Пока недоступно</b>\n${DIVIDER}\n` +
       `Для ${svc.name} нет доступных номеров ни в одной стране. Попробуйте позже.`,
-      { parse_mode: 'HTML', ...countriesKeyboard(serviceCode) }
+      { parse_mode: 'HTML', ...(await countriesKeyboard(process.env.HEROSMS_API_KEY, serviceCode)) }
     );
   }
 
@@ -219,12 +221,12 @@ async function showCheapNumbers(ctx) {
   let text = `🔥 <b>Самые дешёвые номера</b> (ТОП-${top.length})\n${DIVIDER}\n\n`;
 
   for (const o of top) {
-    const priceUZS = await calcPrice(o.cost);
+    const priceUSD = await calcPrice(o.cost);
     const cName = countryName(o.countryCode);
-    text += `${o.service.name} — ${cName}\n💰 <b>${priceUZS.toLocaleString()} сум</b>  ·  📦 ${o.count} шт.\n\n`;
+    text += `${o.service.name} — ${cName}\n💰 <b>${fmtUSD(priceUSD)}</b>  ·  📦 ${o.count} шт.\n\n`;
     rows.push([
       Markup.button.callback(
-        `${o.service.name} — ${priceUZS.toLocaleString()} сум`,
+        `${o.service.name} — ${fmtUSD(priceUSD)}`,
         `cnt_${o.service.code}_${o.countryCode}`
       ),
     ]);
@@ -240,7 +242,7 @@ async function handleConfirm(ctx, serviceCode, countryCode) {
   await ctx.answerCbQuery('⏳ Получаем номер...');
 
   const svc = findService(serviceCode);
-  const cnt = findCountry(countryCode) || { code: countryCode, name: countryName(countryCode) };
+  const cnt = (await findCountry(countryCode)) || { code: countryCode, name: countryName(countryCode) };
   const user = await User.findOne({ telegramId: ctx.from.id });
 
   const { cost, count, ok } = await getNumberPrice(process.env.HEROSMS_API_KEY, serviceCode, countryCode);
@@ -254,13 +256,13 @@ async function handleConfirm(ctx, serviceCode, countryCode) {
   if (count <= 0 || !(cost > 0)) {
     return safeEdit(ctx,
       `📭 Номера закончились за это время. Выберите другую страну.`,
-      { parse_mode: 'HTML', ...countriesKeyboard(serviceCode) }
+      { parse_mode: 'HTML', ...(await countriesKeyboard(process.env.HEROSMS_API_KEY, serviceCode)) }
     );
   }
 
-  const priceUZS = await calcPrice(cost);
+  const priceUSD = await calcPrice(cost);
 
-  if ((user?.balance || 0) < priceUZS) {
+  if ((user?.balance || 0) < priceUSD) {
     return safeEdit(ctx, '❌ Недостаточно средств!', { parse_mode: 'HTML', ...backToMain() });
   }
 
@@ -274,7 +276,7 @@ async function handleConfirm(ctx, serviceCode, countryCode) {
 
   await User.updateOne(
     { telegramId: ctx.from.id },
-    { $inc: { balance: -priceUZS, totalSpent: priceUZS } }
+    { $inc: { balance: -priceUSD, totalSpent: priceUSD } }
   );
 
   await Activation.create({
@@ -283,7 +285,7 @@ async function handleConfirm(ctx, serviceCode, countryCode) {
     service: serviceCode,
     country: countryCode,
     phoneNumber: numData.phoneNumber,
-    pricePaid: priceUZS,
+    pricePaid: priceUSD,
     status: 'pending',
   });
 
@@ -292,7 +294,7 @@ async function handleConfirm(ctx, serviceCode, countryCode) {
     `📱 Номер: <code>+${numData.phoneNumber}</code>\n` +
     `🔧 Сервис: <b>${svc.name}</b>\n` +
     `🌍 Страна: <b>${cnt.name}</b>\n` +
-    `💰 Оплачено: <b>${priceUZS.toLocaleString()} сум</b>\n${DIVIDER}\n` +
+    `💰 Оплачено: <b>${fmtUSD(priceUSD)}</b>\n${DIVIDER}\n` +
     `⏳ Ожидаем SMS (до ${Math.round(MAX_WAIT / 60000)} минут)...`,
     { parse_mode: 'HTML', ...cancelActivationKeyboard(numData.activationId) }
   );
@@ -365,7 +367,7 @@ async function refundIfExpired(activationId, telegramId, telegram) {
       telegramId,
       `⏰ <b>Время истекло (${Math.round(MAX_WAIT / 60000)} мин.)</b>\n${DIVIDER}\n` +
       `📵 SMS на номер не пришла.\n` +
-      `💰 <b>${activation.pricePaid.toLocaleString()} сум</b> возвращено на ваш баланс.`,
+      `💰 <b>${fmtUSD(activation.pricePaid)}</b> возвращено на ваш баланс.`,
       { parse_mode: 'HTML', ...backToMain() }
     );
   } catch {}
@@ -407,7 +409,7 @@ async function handleCancelActivation(ctx, activationId) {
         { $inc: { balance: activation.pricePaid, totalSpent: -activation.pricePaid } }
       );
       text = `🚫 <b>Активация отменена</b>\n${DIVIDER}\n` +
-        `💰 <b>${activation.pricePaid.toLocaleString()} сум</b> возвращено на ваш баланс.`;
+        `💰 <b>${fmtUSD(activation.pricePaid)}</b> возвращено на ваш баланс.`;
     }
 
     await safeEdit(ctx, text, { parse_mode: 'HTML', ...backToMain() });
